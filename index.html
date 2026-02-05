@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>YJCARE</title>
+  <style>
+    :root{
+      --bg:#0b0b0f;
+      --card:#12121a;
+      --text:#f4f4f7;
+      --muted:#a7a7b3;
+      --hair:#262633;
+      --danger:#ff5c5c;
+      --ok:#6ee7b7;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+    .wrap{ max-width:520px; margin:0 auto; padding:14px 14px 24px; }
+    .stack{ display:flex; flex-direction:column; gap:12px; }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      border:1px solid var(--hair);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+    }
+    .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .sub{ color:var(--muted); font-size:12px; letter-spacing:0.2px; }
+    .big{
+      font-size:56px;
+      line-height:1;
+      font-weight:750;
+      letter-spacing:-1.2px;
+    }
+    .delta{
+      font-size:16px;
+      font-weight:650;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      white-space:nowrap;
+    }
+    .delta.up{ color: var(--danger); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
+    .delta.down{ color: var(--ok); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
+
+    .miniLine{
+      display:flex; gap:12px; flex-wrap:wrap;
+      color: var(--muted);
+      font-size: 13px;
+      align-items:center;
+      margin-top:8px;
+    }
+    .miniLine b{ color: var(--text); font-weight:650; letter-spacing:0.2px; }
+
+    canvas{
+      width:100%;
+      height:140px;
+      display:block;
+      border-radius:14px;
+      background: rgba(255,255,255,0.02);
+      border:1px solid var(--hair);
+      margin-top:12px;
+    }
+
+    .timeDisplay{
+      width:100%;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      font-weight:650;
+      letter-spacing:0.2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+    }
+    .timeDisplay span{ color:var(--muted); font-weight:600; font-size:12px; }
+
+    .btnRow{
+      display:flex;
+      gap:0;
+      margin-top:10px;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.02);
+    }
+    .btn{
+      flex:1;
+      border:0;
+      border-right:1px solid var(--hair);
+      background: transparent;
+      color: var(--text);
+      padding:10px 8px;
+      font-size:12px;
+      font-weight:650;
+      min-height:40px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      white-space:nowrap;
+    }
+    .btn:last-child{ border-right:0; }
+    .btn:active{ background: rgba(255,255,255,0.06); }
+
+    .inputs{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-top:12px;
+    }
+    .field{
+      flex:1;
+      background: rgba(255,255,255,0.03);
+      border:1px solid var(--hair);
+      border-radius:14px;
+      padding:10px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+    }
+    .field label{ color:var(--muted); font-size:12px; }
+    .field input{
+      width:120px;
+      background:transparent;
+      border:none;
+      outline:none;
+      color:var(--text);
+      font-size:16px;
+      text-align:right;
+      font-weight:650;
+    }
+    .field input::-webkit-outer-spin-button,
+    .field input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+    .field input[type=number]{ -moz-appearance:textfield; }
+
+    .doseBig{
+      font-size:44px;
+      line-height:1.05;
+      font-weight:780;
+      letter-spacing:-0.8px;
+    }
+    .doseUnit{ font-size:16px; font-weight:650; color:var(--muted); margin-left:6px; }
+    .divider{ height:1px; background: var(--hair); margin: 10px 0 8px; opacity:0.8; }
+    .doseBreak{
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .doseBreak b{ color:var(--text); font-weight:650; }
+
+    .hidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="stack">
+
+      <div class="card">
+        <div class="row" style="align-items:flex-end;">
+          <div id="bgBig" class="big">--</div>
+          <div id="deltaPill" class="delta">--</div>
+        </div>
+
+        <div class="miniLine">
+          <span>IOB <b id="iobTxt">--</b>U</span>
+          <span>COB <b id="cobTxt">--</b>g</span>
+        </div>
+
+        <canvas id="chart" width="900" height="280"></canvas>
+      </div>
+
+      <div class="card">
+        <div id="timeDisplay" class="timeDisplay" title="탭하면 시간 직접 변경">
+          <div id="timeLabel">--</div>
+          <span>기준시간</span>
+        </div>
+
+        <div class="btnRow" aria-label="기준시간 빠른 변경">
+          <button class="btn" data-add="10">+10분</button>
+          <button class="btn" data-add="20">+20분</button>
+          <button class="btn" data-add="30">+30분</button>
+          <button class="btn" data-add="40">+40분</button>
+          <button class="btn" data-add="50">+50분</button>
+          <button class="btn" data-add="60">+60분</button>
+        </div>
+
+        <input id="atTime" class="hidden" type="datetime-local" />
+
+        <div class="inputs">
+          <div class="field">
+            <label>탄수(g)</label>
+            <input id="carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label>목표</label>
+            <input id="targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub">권장 인슐린</div>
+
+        <div style="margin-top:6px;">
+          <span id="finalIns" class="doseBig">--</span><span class="doseUnit">U</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="doseBreak">
+          <span>식사 <b id="mealIns">--</b>U</span>
+          <span>보정 <b id="corrIns">--</b>U</span>
+          <span>IOB <b id="iobSub">--</b>U</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+/* ===== 설정(코드에만 존재) ===== */
+const NS_BASE_URL = "https://ns.whalesound.net";
+const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
+
+/* ===== 유틸 ===== */
+const $ = (id) => document.getElementById(id);
+function pad2(n){ return String(n).padStart(2, "0"); }
+function toLocalInputValue(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function parseLocalInputToDate(v){
+  if (!v) return new Date();
+  const [dp, tp] = v.split("T");
+  const [y,m,d] = dp.split("-").map(Number);
+  const [hh,mm] = tp.split(":").map(Number);
+  return new Date(y, m-1, d, hh, mm, 0, 0);
+}
+function formatKST(d){ return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function safeNum(x, fallback=null){ const n = Number(x); return Number.isFinite(n) ? n : fallback; }
+function withToken(url){
+  if (!NS_TOKEN) return url;
+  const hasQ = url.includes("?");
+  return url + (hasQ ? "&" : "?") + "token=" + encodeURIComponent(NS_TOKEN);
+}
+async function fetchJson(url){
+  const res = await fetch(url, { method:"GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+/* ===== 프로파일 파싱 ===== */
+function pickProfileRecord(profileArr){
+  if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
+  return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
+}
+function getActiveStore(profileRecord){
+  if (!profileRecord) return null;
+  const store = profileRecord.store || profileRecord;
+  if (!store) return null;
+  const defName = profileRecord.defaultProfile || store.defaultProfile || profileRecord.defaultprofile;
+  if (defName && store[defName]) return store[defName];
+  if (store.Default) return store.Default;
+  const keys = Object.keys(store).filter(k => typeof store[k] === "object");
+  return keys.length ? store[keys[0]] : null;
+}
+function timeToSeconds(t){
+  if (typeof t !== "string") return null;
+  const m = t.match(/^(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Number(m[1])*3600 + Number(m[2])*60;
+}
+function pickScheduleValue(scheduleArr, atDate){
+  if (!Array.isArray(scheduleArr) || scheduleArr.length === 0) return null;
+  const sec = atDate.getHours()*3600 + atDate.getMinutes()*60 + atDate.getSeconds();
+  const norm = scheduleArr
+    .map(x => {
+      const ts = safeNum(x.timeAsSeconds, null);
+      const tsec = (ts !== null) ? ts : timeToSeconds(x.time);
+      return { tsec: (tsec ?? 0), value: safeNum(x.value, null) };
+    })
+    .filter(x => x.value !== null)
+    .sort((a,b) => a.tsec - b.tsec);
+  if (!norm.length) return null;
+  let chosen = norm[0].value;
+  for (const it of norm){ if (it.tsec <= sec) chosen = it.value; else break; }
+  return chosen;
+}
+function getProfileAt(profileJson, atDate){
+  const rec = pickProfileRecord(profileJson);
+  const store = getActiveStore(rec);
+  if (!store) return null;
+  const ic = pickScheduleValue(store.carbratio, atDate);
+  const isf = pickScheduleValue(store.sens, atDate);
+  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
+  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
+  return { ic, isf, dia, carbsHr };
+}
+
+/* ===== IOB smootherstep decay ===== */
+function insulinRemainingFractionSmootherstep(dtMs, diaHours){
+  const diaMs = diaHours * 3600 * 1000;
+  if (diaMs <= 0) return 0;
+  const u = clamp01(dtMs / diaMs);
+  const u2 = u*u;
+  const u3 = u2*u;
+  const f = u3 * (10 - 15*u + 6*u2);
+  return 1 - f;
+}
+function computeIOB(treatments, atDate, diaHours){
+  const at = atDate.getTime();
+  let iob = 0;
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+    const insulin = safeNum(tr.insulin, null);
+    if (insulin === null || insulin <= 0) continue;
+    const dt = at - tMs;
+    if (dt < 0) continue;
+    const frac = insulinRemainingFractionSmootherstep(dt, diaHours);
+    if (frac <= 0) continue;
+    iob += insulin * frac;
+  }
+  return iob;
+}
+
+/* ===== COB carbs_hr 기반 선형 decay ===== */
+function computeCOB(treatments, atDate, carbsHr){
+  const at = atDate.getTime();
+  let cob = 0;
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+    const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
+    if (carbs === null || carbs <= 0) continue;
+    const dtH = (at - tMs) / (3600 * 1000);
+    if (dtH < 0) continue;
+    const remain = carbs - carbsHr * dtH;
+    if (remain > 0) cob += remain;
+  }
+  return cob;
+}
+
+/* ===== 혈당 선택 ===== */
+function pickNearestEntry(entries, atDate){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const at = atDate.getTime();
+  let best = null;
+  let bestAbs = Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    const abs = Math.abs(t - at);
+    if (abs < bestAbs){ bestAbs = abs; best = e; }
+  }
+  return best;
+}
+function pickLatestEntry(entries){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  let best = null, bestT = -Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    if (t > bestT){ bestT = t; best = e; }
+  }
+  return best;
+}
+
+/* ===== 차트 ===== */
+function drawChart(canvas, points){
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  const padX = 22, padY = 18;
+  const iw = w - padX*2, ih = h - padY*2;
+
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  for (let i=1;i<=3;i++){
+    const y = padY + (ih/4)*i;
+    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX+iw, y); ctx.stroke();
+  }
+
+  if (!points || points.length < 2) return;
+
+  const xs = points.map(p=>p.t);
+  const ys = points.map(p=>p.v);
+
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  let minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (minY === maxY){ minY -= 10; maxY += 10; }
+  const yPad = Math.max(12, (maxY - minY) * 0.12);
+  minY -= yPad; maxY += yPad;
+
+  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * iw;
+  const yMap = (v) => padY + (1 - (v - minY) / (maxY - minY)) * ih;
+
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+
+  ctx.beginPath();
+  ctx.moveTo(xMap(points[0].t), yMap(points[0].v));
+  for (let i=1;i<points.length;i++){
+    ctx.lineTo(xMap(points[i].t), yMap(points[i].v));
+  }
+  ctx.stroke();
+
+  const last = points[points.length-1];
+  const lx = xMap(last.t), ly = yMap(last.v);
+
+  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI*2); ctx.fill();
+
+  ctx.font = "600 22px -apple-system, system-ui, Segoe UI, Roboto, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText(String(Math.round(last.v)), Math.min(lx+14, w-60), Math.max(ly-12, 28));
+}
+
+/* ===== 상태/갱신 ===== */
+let cachedProfile = null, cachedEntries = null, cachedTreatments = null;
+
+async function loadData(){
+  const base = NS_BASE_URL.replace(/\/+$/,"");
+  const profileUrl = withToken(`${base}/api/v1/profile.json`);
+  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=48`);
+  const trUrl = withToken(`${base}/api/v1/treatments.json?count=300`);
+  const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
+  cachedProfile = p; cachedEntries = e; cachedTreatments = t;
+}
+
+function updateUI(){
+  if (!cachedProfile || !cachedEntries || !cachedTreatments) return;
+
+  const atDate = parseLocalInputToDate($("atTime").value);
+  $("timeLabel").textContent = formatKST(atDate);
+
+  const prof = getProfileAt(cachedProfile, atDate);
+  if (!prof) return;
+
+  const latest = pickLatestEntry(cachedEntries);
+  const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
+
+  const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
+  $("bgBig").textContent = (nowSgv !== null) ? String(Math.round(nowSgv)) : "--";
+
+  // 델타(최신 2포인트)
+  let delta = null;
+  if (Array.isArray(cachedEntries) && cachedEntries.length >= 2){
+    const sorted = [...cachedEntries].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
+    const a = safeNum(sorted[0]?.sgv, null) ?? safeNum(sorted[0]?.mbg, null);
+    const b = safeNum(sorted[1]?.sgv, null) ?? safeNum(sorted[1]?.mbg, null);
+    if (a !== null && b !== null) delta = a - b;
+  }
+  const pill = $("deltaPill");
+  if (delta === null){
+    pill.textContent = "--";
+    pill.className = "delta";
+  } else {
+    const sign = delta > 0 ? "+" : "";
+    pill.textContent = `${sign}${Math.round(delta)}`;
+    pill.className = "delta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
+  }
+
+  // 그래프: 최근 1시간 (기준시간이 미래면 최신시점까지)
+  const endT = Math.min(atDate.getTime(), safeNum(latest?.date, atDate.getTime()) ?? atDate.getTime());
+  const startT = endT - 60*60*1000;
+
+  const series = (Array.isArray(cachedEntries) ? cachedEntries : [])
+    .filter(e => {
+      const t = safeNum(e.date, null);
+      return Number.isFinite(t) && t >= startT && t <= endT;
+    })
+    .sort((a,b)=>safeNum(a.date,0)-safeNum(b.date,0))
+    .map(e => {
+      const t = safeNum(e.date, 0);
+      const v = safeNum(e.sgv, null) ?? safeNum(e.mbg, null);
+      return (v === null) ? null : { t, v };
+    })
+    .filter(Boolean);
+
+  drawChart($("chart"), series);
+
+  // IOB/COB
+  const iob = (Number.isFinite(prof.dia) && prof.dia > 0) ? computeIOB(cachedTreatments, atDate, prof.dia) : null;
+  const cob = (Number.isFinite(prof.carbsHr) && prof.carbsHr > 0) ? computeCOB(cachedTreatments, atDate, prof.carbsHr) : null;
+
+  $("iobTxt").textContent = (iob !== null) ? iob.toFixed(2) : "--";
+  $("cobTxt").textContent = (cob !== null) ? cob.toFixed(1) : "--";
+
+  // 권장 인슐린
+  const carbsIn = safeNum($("carbsIn").value, 0) ?? 0;
+  const target = safeNum($("targetIn").value, 180) ?? 180;
+
+  const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
+  const corrRaw = (Number.isFinite(prof.isf) && prof.isf > 0 && nowSgv !== null) ? ((nowSgv - target) / prof.isf) : null;
+  const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
+
+  const iobSub = (iob !== null) ? iob : 0;
+  let total = 0;
+  if (mealIns !== null) total += mealIns;
+  if (corrIns !== null) total += corrIns;
+  total -= iobSub;
+  total = Math.max(0, total);
+
+  $("finalIns").textContent = total.toFixed(2);
+  $("mealIns").textContent = (mealIns !== null) ? mealIns.toFixed(2) : "--";
+  $("corrIns").textContent = (corrIns !== null) ? corrIns.toFixed(2) : "--";
+  $("iobSub").textContent = (iob !== null) ? iob.toFixed(2) : "--";
+}
+
+let updating = false;
+async function refreshAll(){
+  if (updating) return;
+  updating = true;
+  try{
+    await loadData();
+    updateUI();
+  }catch(e){
+    console.warn("refresh failed", e);
+  }finally{
+    updating = false;
+  }
+}
+
+function bumpMinutes(mins){
+  const d = parseLocalInputToDate($("atTime").value);
+  d.setMinutes(d.getMinutes() + mins);
+  $("atTime").value = toLocalInputValue(d);
+  updateUI();
+}
+
+/* ===== 초기화 ===== */
+(function init(){
+  const now = new Date();
+  $("atTime").value = toLocalInputValue(now);
+  $("timeLabel").textContent = formatKST(now);
+
+  $("timeDisplay").addEventListener("click", () => {
+    const input = $("atTime");
+    if (input.showPicker) input.showPicker();
+    else input.click();
+  });
+
+  document.querySelectorAll(".btn[data-add]").forEach(btn=>{
+    btn.addEventListener("click", () => bumpMinutes(Number(btn.dataset.add)));
+  });
+
+  $("atTime").addEventListener("change", updateUI);
+  $("carbsIn").addEventListener("input", updateUI);
+  $("targetIn").addEventListener("input", updateUI);
+
+  refreshAll();
+  setInterval(refreshAll, 60 * 1000);
+})();
+</script>
+</body>
+</html>
