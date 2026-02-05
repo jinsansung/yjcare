@@ -12,7 +12,6 @@
   <style>
     :root{
       --bg:#0b0b0f;
-      --card:#12121a;
       --text:#f4f4f7;
       --muted:#a7a7b3;
       --hair:#262633;
@@ -38,7 +37,7 @@
       padding:14px;
       box-shadow:0 10px 30px rgba(0,0,0,0.35);
     }
-    .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
     .sub{ color:var(--muted); font-size:12px; letter-spacing:0.2px; }
     .big{
       font-size:56px;
@@ -55,6 +54,7 @@
       background: rgba(255,255,255,0.03);
       color: var(--muted);
       white-space:nowrap;
+      flex:0 0 auto;
     }
     .delta.up{ color: var(--danger); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
     .delta.down{ color: var(--ok); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
@@ -92,8 +92,10 @@
       justify-content:space-between;
       gap:10px;
       min-height:44px;
+      min-width:0;
     }
-    .timeDisplay span{ color:var(--muted); font-weight:600; font-size:12px; }
+    .timeDisplay > div{ min-width:0; }
+    .timeDisplay span{ color:var(--muted); font-weight:600; font-size:12px; flex:0 0 auto; }
 
     .btnRow{
       display:flex;
@@ -125,11 +127,13 @@
     .inputs{
       display:flex;
       gap:10px;
-      align-items:center;
+      align-items:stretch;
       margin-top:12px;
+      min-width:0;
     }
     .field{
-      flex:1;
+      flex:1 1 0;
+      min-width:0;
       background: rgba(255,255,255,0.03);
       border:1px solid var(--hair);
       border-radius:14px;
@@ -140,10 +144,17 @@
       gap:10px;
       min-height:44px;
     }
-    .field label{ color:var(--muted); font-size:12px; white-space: nowrap; min-width: 56px; }
+    .field label{
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
     .field input{
-      width:96px;
-      min-width: 84px;
+      min-width:0;
+      flex:0 1 7ch;          /* 핵심: 줄어들 수 있게 */
+      max-width: 10ch;
+      width:auto;             /* 고정폭 제거 */
       background:transparent;
       border:none;
       outline:none;
@@ -174,12 +185,29 @@
     .doseBreak b{ color:var(--text); font-weight:650; }
 
     .hidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
-
-    @media (max-width: 360px){
-  .field label{ min-width: 52px; }
-  .field input{ width: 84px; min-width: 72px; }
-}
   </style>
+
+  <script>
+    // 업데이트 자동 반영(홈화면 웹앱 캐시 우회)
+    // 배포할 때 version.json의 v만 바꾸면 다음 실행 시 자동으로 최신으로 이동합니다.
+    (async () => {
+      try {
+        const res = await fetch("/version.json", { cache: "no-store" });
+        const data = await res.json();
+        const key = "yj_app_version";
+        const prev = localStorage.getItem(key);
+
+        if (data?.v && prev && prev !== data.v) {
+          localStorage.setItem(key, data.v);
+          const u = new URL(location.href);
+          u.searchParams.set("_v", data.v);
+          location.replace(u.toString());
+          return;
+        }
+        if (data?.v && !prev) localStorage.setItem(key, data.v);
+      } catch (_) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -205,12 +233,12 @@
           <span>기준시간</span>
         </div>
 
-<div class="btnRow" aria-label="기준시간 빠른 변경">
-  <button class="btn" data-reset="1">reset</button>
-  <button class="btn" data-add="5">+5분</button>
-  <button class="btn" data-add="10">+10분</button>
-  <button class="btn" data-add="30">+30분</button>
-</div>
+        <div class="btnRow" aria-label="기준시간 빠른 변경">
+          <button class="btn" data-reset="1">reset</button>
+          <button class="btn" data-add="5">+5분</button>
+          <button class="btn" data-add="10">+10분</button>
+          <button class="btn" data-add="30">+30분</button>
+        </div>
 
         <input id="atTime" class="hidden" type="datetime-local" />
 
@@ -475,7 +503,6 @@ function updateUI(){
   const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
   $("bgBig").textContent = (nowSgv !== null) ? String(Math.round(nowSgv)) : "--";
 
-  // 델타(최신 2포인트)
   let delta = null;
   if (Array.isArray(cachedEntries) && cachedEntries.length >= 2){
     const sorted = [...cachedEntries].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
@@ -493,7 +520,6 @@ function updateUI(){
     pill.className = "delta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
   }
 
-  // 그래프: 최근 1시간 (기준시간이 미래면 최신시점까지)
   const endT = Math.min(atDate.getTime(), safeNum(latest?.date, atDate.getTime()) ?? atDate.getTime());
   const startT = endT - 60*60*1000;
 
@@ -512,14 +538,12 @@ function updateUI(){
 
   drawChart($("chart"), series);
 
-  // IOB/COB
   const iob = (Number.isFinite(prof.dia) && prof.dia > 0) ? computeIOB(cachedTreatments, atDate, prof.dia) : null;
   const cob = (Number.isFinite(prof.carbsHr) && prof.carbsHr > 0) ? computeCOB(cachedTreatments, atDate, prof.carbsHr) : null;
 
   $("iobTxt").textContent = (iob !== null) ? iob.toFixed(2) : "--";
   $("cobTxt").textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  // 권장 인슐린
   const carbsIn = safeNum($("carbsIn").value, 0) ?? 0;
   const target = safeNum($("targetIn").value, 180) ?? 180;
 
@@ -578,12 +602,12 @@ function bumpMinutes(mins){
   });
 
   document.querySelectorAll(".btn[data-reset]").forEach(btn=>{
-  btn.addEventListener("click", () => {
-    const now = new Date();
-    $("atTime").value = toLocalInputValue(now);
-    updateUI();
+    btn.addEventListener("click", () => {
+      const now2 = new Date();
+      $("atTime").value = toLocalInputValue(now2);
+      updateUI();
+    });
   });
-});
 
   $("atTime").addEventListener("change", updateUI);
   $("carbsIn").addEventListener("input", updateUI);
