@@ -64,7 +64,40 @@
     }
     .delta.up{ color: var(--danger); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
     .delta.down{ color: var(--ok); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
+    .topRight{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
 
+.iconBtn{
+  height: 32px;              /* delta와 같은 높이(현재 delta 패딩 기준) */
+  min-width: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.iconBtn:active{
+  background: rgba(255,255,255,0.06);
+}
+
+/* 큰 혈당 편집용 input */
+.bgEditInput{
+  width: 5ch;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font: inherit;              /* .big 스타일 그대로 */
+  text-align: left;
+}
     .miniLine{
       display:flex; gap:12px; flex-wrap:wrap;
       color: var(--muted);
@@ -213,6 +246,9 @@
         if (data?.v && !prev) localStorage.setItem(key, data.v);
       } catch (_) {}
     })();
+
+
+    
   </script>
 </head>
 <body>
@@ -222,7 +258,10 @@
       <div class="card">
         <div class="row" style="align-items:flex-end;">
           <div id="bgBig" class="big">--</div>
-          <div id="deltaPill" class="delta">--</div>
+          <div class="topRight">
+            <div id="deltaPill" class="delta">--</div>
+            <button id="editBgBtn" class="iconBtn" type="button" aria-label="혈당 수정">✎</button>
+          </div>
         </div>
 
         <div class="miniLine">
@@ -285,6 +324,34 @@ const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
 
 /* ===== 유틸 ===== */
+
+
+let manualBg = null; // number | null
+
+function loadManualBg(){
+  try{
+    const v = localStorage.getItem("yj_manual_bg");
+    const n = Number(v);
+    manualBg = Number.isFinite(n) ? n : null;
+  }catch(_){
+    manualBg = null;
+  }
+}
+
+function saveManualBg(n){
+  manualBg = Number.isFinite(n) ? n : null;
+  try{
+    if (manualBg === null) localStorage.removeItem("yj_manual_bg");
+    else localStorage.setItem("yj_manual_bg", String(manualBg));
+  }catch(_){}
+}
+
+
+
+
+
+
+  
 const $ = (id) => document.getElementById(id);
 function pad2(n){ return String(n).padStart(2, "0"); }
 function toLocalInputValue(d){
@@ -507,6 +574,7 @@ function updateUI(){
   const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
 
   const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
+  const effectiveBg = (manualBg !== null) ? manualBg : nowSgv; // 계산 기준
   $("bgBig").textContent = (nowSgv !== null) ? String(Math.round(nowSgv)) : "--";
 
   let delta = null;
@@ -554,7 +622,10 @@ function updateUI(){
   const target = safeNum($("targetIn").value, 180) ?? 180;
 
   const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
-  const corrRaw = (Number.isFinite(prof.isf) && prof.isf > 0 && nowSgv !== null) ? ((nowSgv - target) / prof.isf) : null;
+  const corrRaw =
+  (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
+    ? ((effectiveBg - target) / prof.isf)
+    : null;
   const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
 
   const iobSub = (iob !== null) ? iob : 0;
@@ -594,6 +665,7 @@ function bumpMinutes(mins){
 /* ===== 초기화 ===== */
 (function init(){
 
+  loadManualBg();
   
   const now = new Date();
   $("atTime").value = toLocalInputValue(now);
@@ -617,6 +689,56 @@ function bumpMinutes(mins){
     });
   });
 
+
+
+function beginBgEdit(){
+  const el = $("bgBig");
+  const current = manualBg !== null ? manualBg : Number(el.textContent);
+
+  // 이미 input이면 중복 방지
+  if (el.querySelector("input")) return;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.inputMode = "numeric";
+  input.className = "bgEditInput";
+  input.value = Number.isFinite(current) ? String(Math.round(current)) : "";
+  input.placeholder = "--";
+
+  // 기존 텍스트 비우고 input 삽입
+  el.textContent = "";
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const n = Number(input.value);
+    if (Number.isFinite(n) && n > 0) saveManualBg(n);
+    // 빈 값이면 수동 해제(자동 혈당으로 복귀)
+    if (input.value.trim() === "") saveManualBg(null);
+    updateUI();
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { input.blur(); }
+    if (e.key === "Escape") { saveManualBg(manualBg); updateUI(); }
+  });
+
+  input.addEventListener("blur", commit);
+}
+
+$("editBgBtn").addEventListener("click", beginBgEdit);
+
+// 큰 숫자 자체를 탭해도 수정되게 하고 싶으면(선택)
+$("bgBig").addEventListener("click", beginBgEdit);
+
+
+
+
+
+
+
+  
   $("atTime").addEventListener("change", updateUI);
   $("carbsIn").addEventListener("input", updateUI);
   $("targetIn").addEventListener("input", updateUI);
