@@ -330,24 +330,10 @@ const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
 /* ===== 유틸 ===== */
 
 
-let manualBg = null; // number | null
+let manualBg = null;
 
-function loadManualBg(){
-  try{
-    const v = localStorage.getItem("yj_manual_bg");
-    const n = Number(v);
-    manualBg = Number.isFinite(n) ? n : null;
-  }catch(_){
-    manualBg = null;
-  }
-}
-
-function saveManualBg(n){
+function setManualBg(n){
   manualBg = Number.isFinite(n) ? n : null;
-  try{
-    if (manualBg === null) localStorage.removeItem("yj_manual_bg");
-    else localStorage.setItem("yj_manual_bg", String(manualBg));
-  }catch(_){}
 }
 
 
@@ -686,7 +672,6 @@ function bumpMinutes(mins){
 /* ===== 초기화 ===== */
 (function init(){
 
-  loadManualBg();
   
   const now = new Date();
   $("atTime").value = toLocalInputValue(now);
@@ -732,13 +717,12 @@ function beginBgEdit(){
   input.focus();
   input.select();
 
-  const commit = () => {
-    const n = Number(input.value);
-    if (Number.isFinite(n) && n > 0) saveManualBg(n);
-    // 빈 값이면 수동 해제(자동 혈당으로 복귀)
-    if (input.value.trim() === "") saveManualBg(null);
-    updateUI();
-  };
+const commit = () => {
+  const n = Number(input.value);
+  if (input.value.trim() === "") setManualBg(null);      // 빈 값이면 자동으로 복귀
+  else if (Number.isFinite(n) && n > 0) setManualBg(n);  // 수동 적용
+  updateUI();
+};
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { input.blur(); }
