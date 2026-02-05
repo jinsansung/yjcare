@@ -136,9 +136,10 @@
       gap:10px;
       min-height:44px;
     }
-    .field label{ color:var(--muted); font-size:12px; }
+    .field label{ color:var(--muted); font-size:12px; white-space: nowrap; min-width: 56px; }
     .field input{
-      width:120px;
+      width:96px;
+      min-width: 84px;
       background:transparent;
       border:none;
       outline:none;
@@ -169,6 +170,11 @@
     .doseBreak b{ color:var(--text); font-weight:650; }
 
     .hidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
+
+    @media (max-width: 360px){
+  .field label{ min-width: 52px; }
+  .field input{ width: 84px; min-width: 72px; }
+}
   </style>
 </head>
 <body>
