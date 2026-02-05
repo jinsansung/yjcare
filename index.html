@@ -594,18 +594,6 @@ function bumpMinutes(mins){
 /* ===== 초기화 ===== */
 (function init(){
 
-
-
-
-  let lastTouchEnd = 0;
-  document.addEventListener("touchend", (e) => {
-  const now = Date.now();
-  if (now - lastTouchEnd <= 250) {
-    e.preventDefault();
-  }
-  lastTouchEnd = now;
-  }, { passive: false });
-
   
   const now = new Date();
   $("atTime").value = toLocalInputValue(now);
