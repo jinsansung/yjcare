@@ -205,14 +205,12 @@
           <span>기준시간</span>
         </div>
 
-        <div class="btnRow" aria-label="기준시간 빠른 변경">
-          <button class="btn" data-add="10">+10분</button>
-          <button class="btn" data-add="20">+20분</button>
-          <button class="btn" data-add="30">+30분</button>
-          <button class="btn" data-add="40">+40분</button>
-          <button class="btn" data-add="50">+50분</button>
-          <button class="btn" data-add="60">+60분</button>
-        </div>
+<div class="btnRow" aria-label="기준시간 빠른 변경">
+  <button class="btn" data-reset="1">reset</button>
+  <button class="btn" data-add="5">+5분</button>
+  <button class="btn" data-add="10">+10분</button>
+  <button class="btn" data-add="30">+30분</button>
+</div>
 
         <input id="atTime" class="hidden" type="datetime-local" />
 
@@ -578,6 +576,14 @@ function bumpMinutes(mins){
   document.querySelectorAll(".btn[data-add]").forEach(btn=>{
     btn.addEventListener("click", () => bumpMinutes(Number(btn.dataset.add)));
   });
+
+  document.querySelectorAll(".btn[data-reset]").forEach(btn=>{
+  btn.addEventListener("click", () => {
+    const now = new Date();
+    $("atTime").value = toLocalInputValue(now);
+    updateUI();
+  });
+});
 
   $("atTime").addEventListener("change", updateUI);
   $("carbsIn").addEventListener("input", updateUI);
