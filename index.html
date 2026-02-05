@@ -751,7 +751,6 @@ const onEditBtn = (e) => {
 
 // iOS에서 click 누락/지연 방지를 위해 pointerdown 우선
 editBtn.addEventListener("pointerdown", onEditBtn);
-editBtn.addEventListener("click", onEditBtn);
 
 // 큰 숫자 자체를 탭해도 수정되게 하고 싶으면(선택)
 $("bgBig").addEventListener("click", beginBgEdit);
