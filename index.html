@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="YJCARE">
@@ -19,7 +19,8 @@
       --ok:#6ee7b7;
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
+    *{touch-action: manipulation;}
+    html,body{height:100%; overflow: hidden;}
     body{
       margin:0;
       background:var(--bg);
@@ -592,6 +593,20 @@ function bumpMinutes(mins){
 
 /* ===== 초기화 ===== */
 (function init(){
+
+
+
+
+  let lastTouchEnd = 0;
+  document.addEventListener("touchend", (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 250) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+  }, { passive: false });
+
+  
   const now = new Date();
   $("atTime").value = toLocalInputValue(now);
   $("timeLabel").textContent = formatKST(now);
