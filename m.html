@@ -214,7 +214,7 @@ function animateText(el, nextText, dir){
 }
 
 /* =========================
-   easing (더 부드럽게)
+   easing
 ========================= */
 function easeInOutQuint(t){
   return t < 0.5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2, 5)/2;
@@ -247,7 +247,7 @@ function getDiaAndCarbsHr(profileJson){
 }
 
 /* =========================
-   합의한 IOB/COB 계산식
+   IOB/COB 계산(식은 유지, 기준 시각만 "현재"로)
 ========================= */
 const IOB_PEAK_MIN = 94;
 const COB_DELAY_MIN = 23;
@@ -344,7 +344,7 @@ function lerpColor(c1, c2, t){
   return `rgba(${r},${g},${bb},${aa})`;
 }
 
-// 배경 믹스: 너무 블랙스러웠던 부분 완화 (색이 더 살아나도록)
+// 배경 믹스
 const BG_DARK_MIX = 0.62;
 function darkenRgba(rgbaStr, mixToBlack){
   const c = parseRgba(rgbaStr);
@@ -354,7 +354,6 @@ function darkenRgba(rgbaStr, mixToBlack){
   const b = Math.round(c.b * (1 - t));
   return `rgba(${r},${g},${b},1)`;
 }
-
 function applyStageColor(rgba){
   const stage = document.getElementById("stage");
   if (stage) stage.style.background = rgba;
@@ -399,7 +398,6 @@ function buildSeriesFor1h(entries, endMs){
   const windowMs = 60*60*1000;
   const startMs = endMs - windowMs;
 
-  // 1) 윈도우 주변 데이터(시작 이전 1개 포함) 뽑기
   const points = (entries || [])
     .map(e => ({ t: safeNum(e.date, null), v: getSgv(e) }))
     .filter(p => Number.isFinite(p.t) && p.v !== null)
@@ -409,62 +407,48 @@ function buildSeriesFor1h(entries, endMs){
     return { startMs, endMs, series: [] };
   }
 
-  // 윈도우 시작 이전의 마지막 값을 앵커로 잡기
   let anchor = null;
   for (let i=points.length-1;i>=0;i--){
     if (points[i].t <= startMs){ anchor = points[i]; break; }
   }
-  // 시작 이후 첫 값
   let firstIn = null;
   for (let i=0;i<points.length;i++){
     if (points[i].t >= startMs){ firstIn = points[i]; break; }
   }
-
-  // anchor가 없으면 시작 이후 첫 값을 anchor로 사용(그래프가 튀지 않게)
   if (!anchor) anchor = firstIn || points[0];
 
-  // 2) 윈도우 안의 포인트만 추리되, anchor를 앞에 넣어서 보간 기준으로 삼기
   const inWindow = points.filter(p => p.t >= startMs && p.t <= endMs);
   const merged = [{ t: startMs, v: anchor.v }, ...inWindow];
 
-  // 3) 일정 간격으로 리샘플(계단/뜀 완화)
-  // 1분 간격. 너무 무겁다면 2분(120000)으로 바꾸셔도 됩니다.
   const stepMs = 60 * 1000;
-
   const resampled = [];
   let j = 0;
 
   for (let t = startMs; t <= endMs; t += stepMs){
-    // merged에서 t를 둘러싸는 구간 찾기
     while (j < merged.length-1 && merged[j+1].t < t) j++;
-
     const p0 = merged[j];
     const p1 = merged[Math.min(j+1, merged.length-1)];
 
-    // p1이 같은 시간이거나 뒤가 없으면 hold
     let v;
     if (!p1 || p1.t === p0.t){
       v = p0.v;
     } else if (t >= p1.t){
       v = p1.v;
     } else {
-      // 선형 보간
       const u = (t - p0.t) / (p1.t - p0.t);
       v = p0.v + (p1.v - p0.v) * u;
     }
-
     resampled.push({ t, v });
   }
 
-  // 4) 끝점 보장(마지막 값 hold)
   if (resampled.length){
     resampled[resampled.length-1].t = endMs;
   }
-
   return { startMs, endMs, series: resampled };
 }
+
 /* =========================
-   그래프 렌더 (버퍼는 투명, area만)
+   그래프 렌더 (area만)
 ========================= */
 const CHART_AREA_ALPHA = 0.56;
 
@@ -486,9 +470,7 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
 
   ctx.clearRect(0,0,cssW,cssH);
 
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs){
-    return;
-  }
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
 
   if (!series || series.length < 2){
     const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
@@ -602,13 +584,21 @@ let lastBgValue = null;
 
 let lastRenderedEndMs = null;
 
-let slideAnim = {
-  active:false,
-  from:0,
-  to:0,
-  start:0,
-  dur:1250
+let cachedDia = null;
+let cachedCarbsHr = null;
+
+let anim = {
+  mode: "none",          // none | shift | reveal
+  start: 0,
+  shiftPx: 0,
+  durShift: 1050,
+  durReveal: 820,
+  revealW: 0
 };
+
+function isAnimating(){
+  return anim.mode !== "none" || colorAnim.active;
+}
 
 /* =========================
    데이터 로드
@@ -616,16 +606,36 @@ let slideAnim = {
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
-  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
-  const trUrl = withToken(`${base}/api/v1/treatments.json?count=300`);
+  const entriesUrl  = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
+  const trUrl       = withToken(`${base}/api/v1/treatments.json?count=300`);
   const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
   cachedProfile = p;
   cachedEntries = e;
   cachedTreatments = t;
+
+  const pe = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
+  cachedDia = pe.dia;
+  cachedCarbsHr = pe.carbsHr;
 }
 
 /* =========================
-   슬라이드 애니메이션 틱
+   페더 유틸
+========================= */
+function drawEdgeFeather(ctx, xStart, width, cssH, direction){
+  const g = ctx.createLinearGradient(
+    direction === "toRight" ? xStart : (xStart + width),
+    0,
+    direction === "toRight" ? (xStart + width) : xStart,
+    0
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = g;
+  ctx.fillRect(xStart, 0, width, cssH);
+}
+
+/* =========================
+   애니메이션 틱
 ========================= */
 function tickAnim(){
   const canvas = document.getElementById("bgCanvas");
@@ -648,40 +658,65 @@ function tickAnim(){
 
   const fill = currentFillColor();
   const bgFill = darkenRgba(fill, BG_DARK_MIX);
-
   applyStageColor(bgFill);
+
   ctx.globalAlpha = 1;
   ctx.fillStyle = bgFill;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  // 핵심 수정: 슬라이드가 비활성이면 shift는 반드시 0이어야 함
-  let shift = 0;
+  const now = performance.now();
 
-  if (slideAnim.active){
-    const now = performance.now();
-    const t = Math.min(1, (now - slideAnim.start) / slideAnim.dur);
+  if (anim.mode === "shift"){
+    const t = Math.min(1, (now - anim.start) / anim.durShift);
     const k = easeInOutQuint(t);
-    shift = slideAnim.from + (slideAnim.to - slideAnim.from) * k;
-
-    if (t >= 1){
-      slideAnim.active = false;
-      shift = 0;
-
-      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
-
-      // 잔존 값 때문에 다음 틱에서 겹치지 않도록 리셋
-      slideAnim.from = 0;
-      slideAnim.to = 0;
-    }
+    const shift = anim.shiftPx * k;
 
     ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
-    ctx.drawImage(bufNew, cssW - shift, 0, cssW, cssH);
-  } else {
-    // 슬라이드가 없으면 bufOld만 그린다 (겹침 원천 차단)
+
+    const featherW = Math.min(42, Math.max(18, anim.shiftPx * 0.18));
+    drawEdgeFeather(ctx, cssW - featherW, featherW, cssH, "toRight");
+
+    if (t >= 1){
+      anim.mode = "reveal";
+      anim.start = now;
+      anim.revealW = 0;
+    }
+  }
+  else if (anim.mode === "reveal"){
+    const t = Math.min(1, (now - anim.start) / anim.durReveal);
+    const k = easeInOutQuint(t);
+    anim.revealW = anim.shiftPx * k;
+
+    const gapX = cssW - anim.shiftPx;
+
+    ctx.drawImage(bufOld, -anim.shiftPx, 0, cssW, cssH);
+
+    const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
+    if (clipW > 0){
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(gapX, 0, clipW, cssH);
+      ctx.clip();
+      ctx.drawImage(bufNew, 0, 0, cssW, cssH);
+      ctx.restore();
+
+      const featherW = Math.min(44, Math.max(18, anim.shiftPx * 0.22));
+      const edgeX = gapX + clipW - featherW;
+      if (edgeX >= gapX){
+        drawEdgeFeather(ctx, edgeX, featherW, cssH, "toRight");
+      }
+    }
+
+    if (t >= 1){
+      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
+      anim.mode = "none";
+    }
+  }
+  else{
     ctx.drawImage(bufOld, 0, 0, cssW, cssH);
   }
 
-  if (slideAnim.active || colorAnim.active){
+  if (isAnimating()){
     requestAnimationFrame(tickAnim);
   }
 }
@@ -694,8 +729,6 @@ function renderNow(){
   const arrowEl = document.getElementById("arrowTxt");
   const ageEl = document.getElementById("ageTxt");
   const chgEl = document.getElementById("chgTxt");
-  const iobEl = document.getElementById("iobTxt");
-  const cobEl = document.getElementById("cobTxt");
 
   if (!Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
 
@@ -719,24 +752,10 @@ function renderNow(){
 
   animateText(bgEl, (latestV !== null) ? String(Math.round(latestV)) : "--", dir);
   animateText(arrowEl, arrow, dir);
-
   lastBgValue = Number.isFinite(latestV) ? latestV : lastBgValue;
 
   ageEl.textContent = formatAge(Date.now() - latestMs);
   chgEl.textContent = (delta === null) ? "--" : ((delta > 0 ? "+" : "") + String(Math.round(delta)));
-
-  const { dia, carbsHr } = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
-
-  const iob = (Number.isFinite(dia) && dia > 0 && Array.isArray(cachedTreatments))
-    ? computeIOB(cachedTreatments, latestMs, dia)
-    : null;
-
-  const cob = (Number.isFinite(carbsHr) && carbsHr > 0 && Array.isArray(cachedTreatments))
-    ? computeCOB(cachedTreatments, latestMs, carbsHr)
-    : null;
-
-  iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
-  cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
   const nextFill = colorForBg(latestV);
   startColorTransition(nextFill);
@@ -748,11 +767,11 @@ function renderNow(){
   ensureBufferSize(bufNew, cssW, cssH);
 
   if (!Number.isFinite(lastRenderedEndMs)){
-const series0 = buildSeriesFor1h(cachedEntries, latestMs);
-drawSmoothAreaTo(bufOld, series0, nextFill);
-drawSmoothAreaTo(bufNew, series0, nextFill);
+    const series0 = buildSeriesFor1h(cachedEntries, latestMs);
+    drawSmoothAreaTo(bufOld, series0, nextFill);
+    drawSmoothAreaTo(bufNew, series0, nextFill);
     lastRenderedEndMs = latestMs;
-    requestAnimationFrame(tickAnim);
+    if (!isAnimating()) requestAnimationFrame(tickAnim);
     return;
   }
 
@@ -764,20 +783,50 @@ drawSmoothAreaTo(bufNew, series0, nextFill);
     const windowMs = 60 * 60 * 1000;
 
     const rawShift = cssW * (dt / windowMs);
-    const shiftPx = Math.max(6, Math.min(cssW * 0.4, rawShift));
+    const shiftPx = Math.max(10, Math.min(cssW * 0.40, rawShift));
 
-    slideAnim.active = true;
-    slideAnim.from = 0;
-    slideAnim.to = shiftPx;
-    slideAnim.start = performance.now();
+    anim.mode = "shift";
+    anim.start = performance.now();
+    anim.shiftPx = shiftPx;
+    anim.revealW = 0;
 
     lastRenderedEndMs = latestMs;
     requestAnimationFrame(tickAnim);
     return;
   }
 
-  // 시각 동일: 차트는 바뀌지 않으니 bufOld만 다시 그리면 충분
-  requestAnimationFrame(tickAnim);
+  if (!isAnimating()) requestAnimationFrame(tickAnim);
+}
+
+/* =========================
+   실시간 IOB/COB 업데이트 (현재시간 기준)
+========================= */
+function updateIobCobRealtime(){
+  const iobEl = document.getElementById("iobTxt");
+  const cobEl = document.getElementById("cobTxt");
+  if (!iobEl || !cobEl) return;
+
+  if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0){
+    iobEl.textContent = "--";
+    cobEl.textContent = "--";
+    return;
+  }
+
+  const nowMs = Date.now();
+
+  const dia = cachedDia;
+  const carbsHr = cachedCarbsHr;
+
+  const iob = (Number.isFinite(dia) && dia > 0)
+    ? computeIOB(cachedTreatments, nowMs, dia)
+    : null;
+
+  const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
+    ? computeCOB(cachedTreatments, nowMs, carbsHr)
+    : null;
+
+  iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
+  cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 }
 
 /* =========================
@@ -790,6 +839,7 @@ async function refresh(){
   try{
     await loadData();
     renderNow();
+    updateIobCobRealtime();
   }catch(e){
     console.warn("monitor refresh failed", e);
   }finally{
@@ -805,14 +855,17 @@ async function refresh(){
 
   setInterval(() => {
     const ageEl = document.getElementById("ageTxt");
-    if (!ageEl) return;
-    ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
+    if (ageEl){
+      ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
+    }
+    updateIobCobRealtime();
   }, 1000);
 
   window.addEventListener("resize", () => {
     resizeStage();
     try{
       lastRenderedEndMs = null;
+      anim.mode = "none";
       renderNow();
     }catch(_){}
   });
@@ -822,6 +875,7 @@ async function refresh(){
       resizeStage();
       try{
         lastRenderedEndMs = null;
+        anim.mode = "none";
         renderNow();
       }catch(_){}
     });
