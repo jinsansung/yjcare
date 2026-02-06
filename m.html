@@ -486,6 +486,10 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
 
   ctx.clearRect(0,0,cssW,cssH);
 
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs){
+    return;
+  }
+
   if (!series || series.length < 2){
     const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
     grad0.addColorStop(0, "rgba(0,0,0,0.42)");
@@ -495,6 +499,9 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
     ctx.fillRect(0,0,cssW,cssH);
     return;
   }
+
+  const minY = 40;
+  const maxY = 401;
 
   const minX = startMs;
   const maxX = endMs;
@@ -535,7 +542,6 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // 텍스트 대비용 그라데이션: 이전보다 약하게
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
   grad.addColorStop(0, "rgba(0,0,0,0.52)");
   grad.addColorStop(0.35, "rgba(0,0,0,0.28)");
