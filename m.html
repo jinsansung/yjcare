@@ -12,22 +12,28 @@
       --muted:rgba(244,244,247,0.68);
     }
     *{box-sizing:border-box}
-    html,body{height:100%; margin:0; background:var(--bg); overflow:hidden;}
+    html,body{
+      width:100%;
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      overflow:hidden;
+    }
     body{
       font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
       -webkit-font-smoothing:antialiased;
       text-rendering:optimizeLegibility;
     }
 
-#bgCanvas{
-  position:fixed;
-  left:0;
-  top:0;
-  width:100vw;
-  height:100dvh;               /* iOS 하단 바 변화 대응 */
-  display:block;
-  z-index:0;
-}
+    #bgCanvas{
+      position:fixed;
+      inset:0;
+      width:100%;
+      height:100%;
+      display:block;
+      z-index:0;
+      background:#000;
+    }
 
     .overlay{
       position:fixed;
@@ -37,6 +43,7 @@
       justify-content:center;
       padding: 12px;
       pointer-events:none;
+      z-index:2;
     }
     .panel{
       width:100%;
@@ -81,21 +88,23 @@
     .arrow.down{ color: rgba(110,231,183,0.95); }
     .arrow.flat{ color: rgba(244,244,247,0.68); }
 
-    /* 항상 보이는 기본 텍스트 */
+    /* base는 절대 숨기지 않음 */
     .rollBase{
       position:relative;
       display:inline-block;
       height:1em;
       min-height:1em;
-      overflow:visible; /* 기본 텍스트는 절대 숨기지 않음 */
+      overflow:hidden; /* ghost만 잘라냄 */
     }
     .rollBaseText{
       display:block;
       text-align:center;
       white-space:nowrap;
+      transform: translateY(0);
+      opacity: 1;
     }
 
-    /* 애니메이션 복제 레이어(잠깐만 등장) */
+    /* 움직이는 복제 레이어 */
     .ghost{
       position:absolute;
       inset:0;
@@ -129,22 +138,31 @@
       font-weight: 800;
     }
 
-    @media (max-width: 520px){
-      .bg{ font-size: 156px; }
-      .arrow{ font-size: 74px; min-width: 84px; }
-      .subRow{ font-size: 20px; gap: 16px; }
+    /* 모바일: 전체 텍스트 80% */
+    @media (max-width: 900px), (pointer: coarse){
+      .bg{ font-size: 154px; }
+      .arrow{ font-size: 70px; min-width: 78px; }
+      .subRow{ font-size: 19px; gap: 14px; }
       .panel{ gap: 8px; }
+      .mainRow{ gap: 14px; }
+    }
+    @media (max-width: 520px){
+      .bg{ font-size: 140px; }
+      .arrow{ font-size: 64px; min-width: 72px; }
+      .subRow{ font-size: 18px; gap: 12px; }
+      .panel{ gap: 7px; }
+      .mainRow{ gap: 12px; }
     }
     @media (max-height: 240px){
-      .bg{ font-size: 148px; }
-      .arrow{ font-size: 68px; }
-      .subRow{ font-size: 18px; gap: 14px; }
+      .bg{ font-size: 132px; }
+      .arrow{ font-size: 60px; }
+      .subRow{ font-size: 17px; gap: 12px; }
       .panel{ gap: 6px; }
     }
   </style>
 </head>
 <body>
-  <canvas id="bgCanvas" width="1200" height="600"></canvas>
+  <canvas id="bgCanvas"></canvas>
 
   <div class="overlay">
     <div class="panel">
@@ -225,7 +243,6 @@ function directionToArrow(dirRaw){
     "doubleup": { arrow: "↑↑", cls: "up" },
     "singleup": { arrow: "↑", cls: "up" },
     "fortyfiveup": { arrow: "↗", cls: "up" },
-
     "doubledown": { arrow: "↓↓", cls: "down" },
     "singledown": { arrow: "↓", cls: "down" },
     "fortyfivedown": { arrow: "↘", cls: "down" }
@@ -305,7 +322,7 @@ function computeCOB(treatments, atMs, carbsHr){
   return cob;
 }
 
-/* ===== 배경 그래프(원래 코드 유지, 단순 draw) ===== */
+/* ===== 배경 그래프 ===== */
 function zoneColor(bg){
   if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
   if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
@@ -317,22 +334,30 @@ function zoneColor(bg){
 
 function drawAreaBackground(canvas, series){
   const ctx = canvas.getContext("2d");
-  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-const vv = window.visualViewport;
-const cssW = vv ? vv.width : window.innerWidth;
-const cssH = vv ? vv.height : window.innerHeight;
 
-  canvas.width = Math.floor(cssW * dpr);
+  const rect = canvas.getBoundingClientRect();
+  const cssW = rect.width;
+  const cssH = rect.height;
+
+  if (!cssW || !cssH || cssW < 2 || cssH < 2) return false;
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width  = Math.floor(cssW * dpr);
   canvas.height = Math.floor(cssH * dpr);
-  canvas.style.width = cssW + "px";
-  canvas.style.height = cssH + "px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
   ctx.clearRect(0,0,cssW,cssH);
   ctx.fillStyle = "#000";
   ctx.fillRect(0,0,cssW,cssH);
 
-  if (!series || series.length < 2) return;
+  if (!series || series.length < 2){
+    const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
+    grad0.addColorStop(0, "rgba(0,0,0,0.76)");
+    grad0.addColorStop(1, "rgba(0,0,0,0.12)");
+    ctx.fillStyle = grad0;
+    ctx.fillRect(0,0,cssW,cssH);
+    return true;
+  }
 
   const padX = 10;
   const padY = 10;
@@ -376,27 +401,41 @@ const cssH = vv ? vv.height : window.innerHeight;
   grad.addColorStop(1, "rgba(0,0,0,0.12)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,cssW,cssH);
+
+  return true;
 }
 
-/* ===== 롤 애니메이션(기본 텍스트는 항상 남김) ===== */
-function rollSwap(containerEl, baseTextEl, nextText, direction){
+/* ===== 롤 애니메이션(핵심 수정: base는 항상 보임) ===== */
+function rollSwapSafe(containerEl, baseTextEl, nextText, direction){
   const prevText = baseTextEl.textContent;
   if (nextText === prevText) return;
 
-  const ghost = document.createElement("span");
-  ghost.className = "ghost";
-  const ghostText = document.createElement("span");
-  ghostText.className = "ghostText";
-  ghostText.textContent = nextText;
-  ghost.appendChild(ghostText);
-  containerEl.appendChild(ghost);
+  baseTextEl.textContent = nextText;
+  baseTextEl.style.opacity = "1";
+  baseTextEl.style.transform = "translateY(0)";
 
-  const px = Math.max(24, Math.round(containerEl.getBoundingClientRect().height * 1.15));
-  const inFrom = (direction === "down") ? -px : px;
-  const outTo  = (direction === "down") ? px : -px;
+  const oldGhost = document.createElement("span");
+  oldGhost.className = "ghost";
+  const oldText = document.createElement("span");
+  oldText.className = "ghostText";
+  oldText.textContent = prevText;
+  oldGhost.appendChild(oldText);
+  containerEl.appendChild(oldGhost);
+
+  const newGhost = document.createElement("span");
+  newGhost.className = "ghost";
+  const newText = document.createElement("span");
+  newText.className = "ghostText";
+  newText.textContent = nextText;
+  newGhost.appendChild(newText);
+  containerEl.appendChild(newGhost);
+
+  const h = Math.max(24, Math.round(containerEl.getBoundingClientRect().height * 1.15));
+  const inFrom = (direction === "down") ? -h : h;
+  const outTo  = (direction === "down") ? h : -h;
 
   try{
-    baseTextEl.animate(
+    oldGhost.animate(
       [
         { transform: "translateY(0)", opacity: 1 },
         { transform: `translateY(${outTo}px)`, opacity: 0 }
@@ -404,21 +443,24 @@ function rollSwap(containerEl, baseTextEl, nextText, direction){
       { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
     );
 
-    ghost.animate(
+    const animNew = newGhost.animate(
       [
         { transform: `translateY(${inFrom}px)`, opacity: 0 },
         { transform: "translateY(0)", opacity: 1 }
       ],
       { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
-    ).onfinish = () => {
-      baseTextEl.textContent = nextText;
-      baseTextEl.style.transform = "translateY(0)";
-      baseTextEl.style.opacity = "1";
-      ghost.remove();
+    );
+
+    const cleanup = () => {
+      if (oldGhost && oldGhost.isConnected) oldGhost.remove();
+      if (newGhost && newGhost.isConnected) newGhost.remove();
     };
+
+    animNew.onfinish = cleanup;
+    animNew.oncancel = cleanup;
   }catch(_){
-    baseTextEl.textContent = nextText;
-    ghost.remove();
+    if (oldGhost && oldGhost.isConnected) oldGhost.remove();
+    if (newGhost && newGhost.isConnected) newGhost.remove();
   }
 }
 
@@ -426,9 +468,12 @@ function rollSwap(containerEl, baseTextEl, nextText, direction){
 let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
-let latestEntryMsForAge = null;
 
+let latestEntryMsForAge = null;
 let lastBgNum = null;
+
+let lastSeries = null;
+let chartRetryRaf = 0;
 
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
@@ -439,6 +484,21 @@ async function loadData(){
   cachedProfile = p;
   cachedEntries = e;
   cachedTreatments = t;
+}
+
+function drawChartNow(){
+  const canvas = document.getElementById("bgCanvas");
+  if (!canvas) return;
+
+  if (!lastSeries) return;
+
+  const ok = drawAreaBackground(canvas, lastSeries);
+  if (!ok){
+    if (chartRetryRaf) cancelAnimationFrame(chartRetryRaf);
+    chartRetryRaf = requestAnimationFrame(() => {
+      drawAreaBackground(canvas, lastSeries);
+    });
+  }
 }
 
 function render(){
@@ -474,14 +534,14 @@ function render(){
   let dir = "up";
   if (lastBgNum !== null && Number.isFinite(latestV)){
     dir = latestV > lastBgNum ? "up" : (latestV < lastBgNum ? "down" : "up");
-  }else if (delta !== null){
+  } else if (delta !== null){
     dir = delta >= 0 ? "up" : "down";
   }
 
   if (bgText.textContent === "--" && nextBgText !== "--"){
     bgText.textContent = nextBgText;
-  }else{
-    rollSwap(bgRoll, bgText, nextBgText, dir);
+  } else {
+    rollSwapSafe(bgRoll, bgText, nextBgText, dir);
   }
 
   if (Number.isFinite(latestV)) lastBgNum = latestV;
@@ -491,21 +551,21 @@ function render(){
 
   if (!arrowText.textContent || arrowText.textContent === "—"){
     arrowText.textContent = arrow;
-  }else{
-    rollSwap(arrowRoll, arrowText, arrow, dir);
+  } else {
+    rollSwapSafe(arrowRoll, arrowText, arrow, dir);
   }
 
   if (latestMs !== null){
     latestEntryMsForAge = latestMs;
     ageEl.textContent = formatAge(Date.now() - latestMs);
-  }else{
+  } else {
     ageEl.textContent = "--:--";
   }
 
   if (delta !== null){
     const sign = delta > 0 ? "+" : "";
     chgEl.textContent = sign + String(Math.round(delta));
-  }else{
+  } else {
     chgEl.textContent = "--";
   }
 
@@ -528,7 +588,7 @@ function render(){
   const endT = (latestMs !== null) ? latestMs : Date.now();
   const startT = endT - 60*60*1000;
 
-  const series = cachedEntries
+  lastSeries = cachedEntries
     .filter(e => {
       const t = safeNum(e.date, null);
       const v = getSgv(e);
@@ -538,7 +598,12 @@ function render(){
     .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }))
     .filter(p => p.v !== null);
 
-  drawAreaBackground(document.getElementById("bgCanvas"), series);
+  try{
+    drawChartNow();
+  }catch(e){
+    console.warn("chart draw failed", e);
+    requestAnimationFrame(drawChartNow);
+  }
 }
 
 let updating = false;
@@ -550,12 +615,10 @@ async function refresh(){
     render();
   }catch(e){
     console.warn("monitor refresh failed", e);
-
     const bgText = document.getElementById("bgText");
     const arrowText = document.getElementById("arrowText");
     const cachedBg = localStorage.getItem(LS_KEY_BG);
     const cachedArrow = localStorage.getItem(LS_KEY_ARROW);
-
     if (cachedBg) bgText.textContent = cachedBg;
     if (cachedArrow) arrowText.textContent = cachedArrow;
   }finally{
@@ -565,10 +628,7 @@ async function refresh(){
 
 (function init(){
   refresh();
-if (window.visualViewport){
-  window.visualViewport.addEventListener("resize", () => { try{ render(); }catch(_){ } });
-  window.visualViewport.addEventListener("scroll", () => { try{ render(); }catch(_){ } });
-}
+
   setInterval(refresh, 30 * 1000);
 
   setInterval(() => {
@@ -584,10 +644,24 @@ if (window.visualViewport){
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden){
       refresh();
+      requestAnimationFrame(drawChartNow);
     }
   });
 
-  window.addEventListener("resize", () => { try{ render(); }catch(_){ } });
+  if (window.visualViewport){
+    window.visualViewport.addEventListener("resize", () => {
+      try{ render(); }catch(_){}
+      requestAnimationFrame(drawChartNow);
+    });
+    window.visualViewport.addEventListener("scroll", () => {
+      requestAnimationFrame(drawChartNow);
+    });
+  }
+
+  window.addEventListener("resize", () => {
+    try{ render(); }catch(_){}
+    requestAnimationFrame(drawChartNow);
+  });
 })();
 </script>
 </body>
