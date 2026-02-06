@@ -178,7 +178,7 @@ function directionToArrow(dirRaw){
   const key = dir.toLowerCase();
 
   if (!dir || key === "none" || key === "flat" || key === "notcomputable" || key === "rateoutofrange"){
-    return { arrow: "-", cls: "flat" };
+    return { arrow: "――", cls: "flat" };
   }
 
   const map = {
