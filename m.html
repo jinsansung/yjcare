@@ -19,13 +19,15 @@
       text-rendering:optimizeLegibility;
     }
 
-    #bgCanvas{
-      position:fixed;
-      inset:0;
-      width:100vw;
-      height:100vh;
-      display:block;
-    }
+#bgCanvas{
+  position:fixed;
+  left:0;
+  top:0;
+  width:100vw;
+  height:100dvh;               /* iOS 하단 바 변화 대응 */
+  display:block;
+  z-index:0;
+}
 
     .overlay{
       position:fixed;
@@ -316,8 +318,9 @@ function zoneColor(bg){
 function drawAreaBackground(canvas, series){
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const cssW = window.innerWidth;
-  const cssH = window.innerHeight;
+const vv = window.visualViewport;
+const cssW = vv ? vv.width : window.innerWidth;
+const cssH = vv ? vv.height : window.innerHeight;
 
   canvas.width = Math.floor(cssW * dpr);
   canvas.height = Math.floor(cssH * dpr);
@@ -562,7 +565,10 @@ async function refresh(){
 
 (function init(){
   refresh();
-
+if (window.visualViewport){
+  window.visualViewport.addEventListener("resize", () => { try{ render(); }catch(_){ } });
+  window.visualViewport.addEventListener("scroll", () => { try{ render(); }catch(_){ } });
+}
   setInterval(refresh, 30 * 1000);
 
   setInterval(() => {
