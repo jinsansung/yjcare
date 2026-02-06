@@ -212,7 +212,14 @@ function animateText(el, nextText, dir){
   el.classList.add(dir === "down" ? "rollDown" : "rollUp");
   window.setTimeout(() => el.classList.remove("rollUp","rollDown"), 480);
 }
-function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+/* =========================
+   easing (더 부드럽게)
+========================= */
+// 기존 easeOutCubic보다 더 완만하게 시작/끝이 부드러운 형태
+function easeInOutQuint(t){
+  return t < 0.5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2, 5)/2;
+}
 
 /* =========================
    프로파일에서 dia / carbs_hr 읽기
@@ -339,6 +346,18 @@ function lerpColor(c1, c2, t){
   const aa= +lerp(a.a,b.a,t).toFixed(3);
   return `rgba(${r},${g},${bb},${aa})`;
 }
+
+// 배경을 블랙에 가깝게 만들기 (버퍼 겹침 방지용으로 배경은 메인캔버스에서 1회만 그릴 것)
+const BG_DARK_MIX = 0.78; // 0=원색, 1=완전블랙
+function darkenRgba(rgbaStr, mixToBlack){
+  const c = parseRgba(rgbaStr);
+  const t = clamp01(mixToBlack);
+  const r = Math.round(c.r * (1 - t));
+  const g = Math.round(c.g * (1 - t));
+  const b = Math.round(c.b * (1 - t));
+  return `rgba(${r},${g},${b},1)`;
+}
+
 function applyStageColor(rgba){
   const stage = document.getElementById("stage");
   if (stage) stage.style.background = rgba;
@@ -351,7 +370,7 @@ let colorAnim = {
   from:"rgba(255,255,255,0.10)",
   to:"rgba(255,255,255,0.10)",
   start:0,
-  dur:650
+  dur:900
 };
 function startColorTransition(next){
   if (!colorAnim.to){
@@ -370,7 +389,7 @@ function currentFillColor(){
   if (!colorAnim.active) return colorAnim.to;
   const now = performance.now();
   const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
-  const k = easeOutCubic(t);
+  const k = easeInOutQuint(t);
   const c = lerpColor(colorAnim.from, colorAnim.to, k);
   if (t >= 1) colorAnim.active = false;
   return c;
@@ -392,9 +411,11 @@ function buildSeriesFor1h(entries, endMs){
 }
 
 /* =========================
-   그래프 렌더(대비: 배경 1.0, 차트 area는 낮은 alpha)
+   그래프 렌더
+   - 버퍼에는 배경을 그리지 않는다 (투명 유지)
+   - 차트 area만 그린다
 ========================= */
-const CHART_AREA_ALPHA = 0.26; // 배경 대비용(0.20~0.35 추천)
+const CHART_AREA_ALPHA = 0.42; // 면이 더 선명하도록 상향
 
 function drawSmoothArea(canvas, series, fillColor){
   const ctx = canvas.getContext("2d", { alpha: true });
@@ -409,19 +430,15 @@ function drawSmoothArea(canvas, series, fillColor){
   canvas.style.height = cssH + "px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
+  // 버퍼는 투명으로 클리어
   ctx.clearRect(0,0,cssW,cssH);
 
-  // 1) 배경은 fillColor로 꽉 채움
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = fillColor;
-  ctx.fillRect(0,0,cssW,cssH);
-
-  // 데이터가 없으면 대비만 유지(상단 어둡게)
+  // 데이터가 없으면: 텍스트 대비용 그라데이션만 살짝 얹고 종료
   if (!series || series.length < 2){
     const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
-    grad0.addColorStop(0, "rgba(0,0,0,0.70)");
-    grad0.addColorStop(0.35, "rgba(0,0,0,0.38)");
-    grad0.addColorStop(1, "rgba(0,0,0,0.12)");
+    grad0.addColorStop(0, "rgba(0,0,0,0.55)");
+    grad0.addColorStop(0.35, "rgba(0,0,0,0.30)");
+    grad0.addColorStop(1, "rgba(0,0,0,0.08)");
     ctx.fillStyle = grad0;
     ctx.fillRect(0,0,cssW,cssH);
     return;
@@ -452,7 +469,7 @@ function drawSmoothArea(canvas, series, fillColor){
     };
   };
 
-  // 2) 차트 area는 더 투명하게(배경과 대비)
+  // 차트 area만 렌더
   ctx.globalAlpha = CHART_AREA_ALPHA;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
@@ -471,10 +488,10 @@ function drawSmoothArea(canvas, series, fillColor){
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // 3) 상단 텍스트 대비용 그라데이션
+  // 상단 텍스트 대비용 그라데이션 (버퍼 위에 얹는 오버레이)
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
-  grad.addColorStop(0, "rgba(0,0,0,0.65)");
-  grad.addColorStop(0.35, "rgba(0,0,0,0.35)");
+  grad.addColorStop(0, "rgba(0,0,0,0.62)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.34)");
   grad.addColorStop(1, "rgba(0,0,0,0.10)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,cssW,cssH);
@@ -497,7 +514,6 @@ function ensureBufferSize(buf, cssW, cssH){
   buf._cssW = cssW;
   buf._cssH = cssH;
 }
-
 function drawSmoothAreaTo(buf, series, fillColor){
   buf._cssW = buf._cssW ?? window.innerWidth;
   buf._cssH = buf._cssH ?? window.innerHeight;
@@ -538,7 +554,7 @@ let slideAnim = {
   from:0,
   to:0,
   start:0,
-  dur:650
+  dur:1100  // 더 부드럽게: 기존 650 -> 1100
 };
 
 /* =========================
@@ -577,14 +593,21 @@ function tickAnim(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,cssW,cssH);
 
+  // 현재 차트색(fill)과 실제 배경색(bgFill)을 분리
   const fill = currentFillColor();
-  applyStageColor(fill);
+  const bgFill = darkenRgba(fill, BG_DARK_MIX);
+
+  // 배경은 메인 캔버스에서 1회만 깔기 (버퍼 배경 겹침 방지)
+  applyStageColor(bgFill);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = bgFill;
+  ctx.fillRect(0, 0, cssW, cssH);
 
   let shift = slideAnim.to;
   if (slideAnim.active){
     const now = performance.now();
     const t = Math.min(1, (now - slideAnim.start) / slideAnim.dur);
-    const k = easeOutCubic(t);
+    const k = easeInOutQuint(t);
     shift = slideAnim.from + (slideAnim.to - slideAnim.from) * k;
 
     if (t >= 1){
@@ -594,7 +617,7 @@ function tickAnim(){
     }
   }
 
-  // old: 왼쪽으로 밀림, new: 오른쪽에서 진입
+  // old/new는 "차트+상단그라데이션"만 포함 (투명 배경)
   ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
   ctx.drawImage(bufNew, cssW - shift, 0, cssW, cssH);
 
@@ -681,7 +704,17 @@ function renderNow(){
     canvas.style.height = cssH + "px";
     mainCtx.setTransform(dpr,0,0,dpr,0,0);
     mainCtx.clearRect(0,0,cssW,cssH);
-    applyStageColor(currentFillColor());
+
+    const fill = currentFillColor();
+    const bgFill = darkenRgba(fill, BG_DARK_MIX);
+    applyStageColor(bgFill);
+
+    // 배경 1회
+    mainCtx.globalAlpha = 1;
+    mainCtx.fillStyle = bgFill;
+    mainCtx.fillRect(0,0,cssW,cssH);
+
+    // 차트 버퍼 합성
     mainCtx.drawImage(bufOld, 0, 0, cssW, cssH);
     return;
   }
@@ -693,7 +726,10 @@ function renderNow(){
 
     const dt = latestMs - lastRenderedEndMs;
     const windowMs = 60 * 60 * 1000;
-    const shiftPx = Math.max(12, Math.min(cssW, cssW * (dt / windowMs))); // 최소 이동량 12px로 새로고침 느낌 완화
+
+    // 더 부드럽게: 최소 이동량 낮추고, 큰 점프는 더 강하게 제한
+    const rawShift = cssW * (dt / windowMs);
+    const shiftPx = Math.max(6, Math.min(cssW * 0.55, rawShift)); // min 6px, max 55%폭
 
     slideAnim.active = true;
     slideAnim.from = 0;
@@ -707,6 +743,9 @@ function renderNow(){
 
   // 시각 동일: 컬러만 반영(슬라이드 없음)
   if (colorAnim.active){
+    requestAnimationFrame(tickAnim);
+  } else {
+    // 혹시라도 정지 프레임이 남아있다면 한 번 그려줌
     requestAnimationFrame(tickAnim);
   }
 }
@@ -742,7 +781,6 @@ async function refresh(){
 
   window.addEventListener("resize", () => {
     resizeStage();
-    // 리사이즈 시 버퍼 재렌더(현재 화면 유지)
     try{
       lastRenderedEndMs = null;
       renderNow();
