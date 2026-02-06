@@ -227,7 +227,7 @@ function getDiaAndCarbsHr(profileJson){
   return { dia, carbsHr };
 }
 
-/* 계산기 코드에서 가져온 IOB/COB */
+/* IOB/COB (현 버전 유지) */
 function insulinRemainingFractionSmootherstep(dtMs, diaHours){
   const diaMs = diaHours * 3600 * 1000;
   if (diaMs <= 0) return 0;
@@ -292,8 +292,18 @@ function lerpColor(c1, c2, t){
   return `rgba(${r},${g},${bb},${aa})`;
 }
 
-/* 부드러운 곡선 area: 패딩 0, 먼저 전체를 fillColor로 채워서 검은 공백 제거 */
-function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+/* 화면 전체 배경도 실시간으로 컬러 반영 */
+function applyStageColor(rgba){
+  const stage = document.getElementById("stage");
+  if (stage) stage.style.background = rgba;
+  document.documentElement.style.background = rgba;
+  document.body.style.background = rgba;
+}
+
+/* 캔버스 렌더: 항상 화면 전체를 fillColor로 먼저 채우고, 그 위에 그래프를 그림 */
+function drawSmoothArea(canvas, series, fillColor){
   const ctx = canvas.getContext("2d", { alpha: true });
 
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -308,7 +318,6 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
 
   ctx.clearRect(0,0,cssW,cssH);
 
-  /* 핵심: 화면 전체를 현재 컬러로 먼저 채움 (슬라이드 중 빈 구간도 같은 컬러로 보이게) */
   ctx.fillStyle = fillColor;
   ctx.fillRect(0,0,cssW,cssH);
 
@@ -322,11 +331,6 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
     return;
   }
 
-  const padX = 0;
-  const padY = 0;
-  const w = cssW - padX*2;
-  const h = cssH - padY*2;
-
   const minY = 40;
   const maxY = 401;
 
@@ -334,12 +338,14 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
 
-  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w + (xOffsetPx || 0);
-  const yMap = (v) => padY + (1 - ((v - minY) / (maxY - minY))) * h;
+  const w = cssW;
+  const h = cssH;
+
+  const xMap = (t) => ((t - minX) / (maxX - minX)) * w;
+  const yMap = (v) => (1 - ((v - minY) / (maxY - minY))) * h;
 
   const pts = series.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
 
-  /* Catmull-Rom -> Bezier */
   const tension = 0.5;
   const cp = (p0, p1, p2, p3) => {
     const d1 = { x: (p2.x - p0.x) * tension, y: (p2.y - p0.y) * tension };
@@ -350,7 +356,6 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
     };
   };
 
-  /* area는 fillColor보다 조금 진하게 */
   ctx.globalAlpha = 0.95;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
@@ -367,10 +372,8 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
   ctx.closePath();
   ctx.fillStyle = fillColor;
   ctx.fill();
-
   ctx.globalAlpha = 1;
 
-  /* 상단 어둡게: 텍스트 대비 */
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
   grad.addColorStop(0, "rgba(0,0,0,0.70)");
   grad.addColorStop(0.35, "rgba(0,0,0,0.38)");
@@ -415,12 +418,25 @@ let latestEntryMsForAge = null;
 let lastBgValue = null;
 
 let prevGraphEndMs = null;
-let lastSeriesForAnim = null;
+let pendingGraphEndMs = null;
 
-let graphAnim = { active:false, from:0, to:0, start:0, dur:700 };
-let colorAnim = { active:false, from:"rgba(255,255,255,0.10)", to:"rgba(255,255,255,0.10)", start:0, dur:650 };
+/* 애니메이션: “슬라이드” 대신 “윈도우(endMs) 자체를 보간”해서,
+   화면 밖에서 먼저 그려진 뒤 이동하는 것처럼 보이게(공백 없음) */
+let anim = {
+  active:false,
+  fromEndMs:0,
+  toEndMs:0,
+  start:0,
+  dur:700
+};
 
-function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+let colorAnim = {
+  active:false,
+  from:"rgba(255,255,255,0.10)",
+  to:"rgba(255,255,255,0.10)",
+  start:0,
+  dur:650
+};
 
 function startColorTransition(next){
   if (!colorAnim.to){
@@ -443,37 +459,6 @@ function currentFillColor(){
   const c = lerpColor(colorAnim.from, colorAnim.to, k);
   if (t >= 1) colorAnim.active = false;
   return c;
-}
-
-function startGraphSlide(series, dx){
-  lastSeriesForAnim = series;
-  graphAnim.active = true;
-  graphAnim.from = 0;
-  graphAnim.to = dx;
-  graphAnim.start = performance.now();
-}
-
-function tickAnim(){
-  if (!lastSeriesForAnim) return;
-  const canvas = document.getElementById("bgCanvas");
-
-  let x = 0;
-  if (graphAnim.active){
-    const now = performance.now();
-    const t = Math.min(1, (now - graphAnim.start) / graphAnim.dur);
-    const k = easeOutCubic(t);
-    x = graphAnim.from + (graphAnim.to - graphAnim.from) * k;
-    if (t >= 1){
-      graphAnim.active = false;
-      x = 0;
-    }
-  }
-
-  drawSmoothArea(canvas, lastSeriesForAnim, currentFillColor(), x);
-
-  if (graphAnim.active || colorAnim.active){
-    requestAnimationFrame(tickAnim);
-  }
 }
 
 async function loadData(){
@@ -500,6 +485,38 @@ function buildSeriesFor1h(entries, endMs){
     .filter(p => p.v !== null);
 }
 
+function renderFrame(endMs){
+  const canvas = document.getElementById("bgCanvas");
+  const series = buildSeriesFor1h(cachedEntries || [], endMs);
+  const fill = currentFillColor();
+  applyStageColor(fill);
+  drawSmoothArea(canvas, series, fill);
+}
+
+function tickAnim(){
+  if (!anim.active && !colorAnim.active) return;
+
+  const now = performance.now();
+  let endMs = pendingGraphEndMs ?? prevGraphEndMs ?? Date.now();
+
+  if (anim.active){
+    const t = Math.min(1, (now - anim.start) / anim.dur);
+    const k = easeOutCubic(t);
+    endMs = Math.round(anim.fromEndMs + (anim.toEndMs - anim.fromEndMs) * k);
+    if (t >= 1){
+      anim.active = false;
+      prevGraphEndMs = anim.toEndMs;
+      pendingGraphEndMs = null;
+    }
+  }
+
+  renderFrame(endMs);
+
+  if (anim.active || colorAnim.active){
+    requestAnimationFrame(tickAnim);
+  }
+}
+
 function renderNow(){
   const bgEl = document.getElementById("bgTxt");
   const arrowEl = document.getElementById("arrowTxt");
@@ -507,7 +524,6 @@ function renderNow(){
   const chgEl = document.getElementById("chgTxt");
   const iobEl = document.getElementById("iobTxt");
   const cobEl = document.getElementById("cobTxt");
-  const canvas = document.getElementById("bgCanvas");
 
   if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
 
@@ -556,30 +572,24 @@ function renderNow(){
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  const endT = latestMs;
-  const series = buildSeriesFor1h(cachedEntries, endT);
-  lastSeriesForAnim = series;
+  const nextFill = colorForBg(latestV);
+  startColorTransition(nextFill);
 
-  startColorTransition(colorForBg(latestV));
-
-  let dx = 0;
-  if (Number.isFinite(prevGraphEndMs) && Number.isFinite(endT) && endT > prevGraphEndMs){
-    const dt = endT - prevGraphEndMs;
-    const windowMs = 60 * 60 * 1000;
-    const w = (canvas._cssW || window.innerWidth);
-    dx = -w * (dt / windowMs);
-  }
-  prevGraphEndMs = endT;
-
-  if (Math.abs(dx) < 1){
-    drawSmoothArea(canvas, series, currentFillColor(), 0);
+  /* 그래프: 새 endMs가 오면 prevEndMs -> newEndMs를 보간하며 매 프레임 재구성
+     이렇게 하면 “오른쪽 공백”이 생길 구조 자체가 없어집니다. */
+  if (Number.isFinite(prevGraphEndMs) && latestMs > prevGraphEndMs){
+    pendingGraphEndMs = latestMs;
+    anim.active = true;
+    anim.fromEndMs = prevGraphEndMs;
+    anim.toEndMs = latestMs;
+    anim.start = performance.now();
+    requestAnimationFrame(tickAnim);
   } else {
-    startGraphSlide(series, dx);
-    requestAnimationFrame(tickAnim);
-  }
-
-  if (colorAnim.active && !graphAnim.active){
-    requestAnimationFrame(tickAnim);
+    prevGraphEndMs = latestMs;
+    renderFrame(latestMs);
+    if (colorAnim.active){
+      requestAnimationFrame(tickAnim);
+    }
   }
 }
 
