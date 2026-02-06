@@ -162,12 +162,13 @@
     }
     #calcModal.isOpen{ display:block; }
 
+    /* 배경 불투명도 강화 */
     #calcBackdrop{
       position:absolute;
       inset:0;
-      background: rgba(0,0,0,0.58);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      background: rgba(0,0,0,0.78);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
 
     #calcSheet{
@@ -188,12 +189,14 @@
     }
 
     #calcModal .calcStack{ display:flex; flex-direction:column; gap:12px; }
+
+    /* 카드 배경도 살짝 더 불투명하게 */
     #calcModal .calcCard{
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
-      border:1px solid rgba(255,255,255,0.10);
+      background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.05));
+      border:1px solid rgba(255,255,255,0.14);
       border-radius:18px;
       padding:14px;
-      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+      box-shadow:0 10px 30px rgba(0,0,0,0.45);
     }
 
     #calcModal .calcRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
@@ -213,14 +216,14 @@
       font-weight:650;
       padding:6px 10px;
       border-radius:999px;
-      border:1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.03);
-      color: rgba(244,244,247,0.62);
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: rgba(244,244,247,0.70);
       white-space:nowrap;
       flex:0 0 auto;
     }
-    #calcModal .calcDelta.up{ color: rgba(255,92,92,1); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
-    #calcModal .calcDelta.down{ color: rgba(110,231,183,1); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
+    #calcModal .calcDelta.up{ color: rgba(255,92,92,1); border-color: rgba(255,92,92,0.40); background: rgba(255,92,92,0.12); }
+    #calcModal .calcDelta.down{ color: rgba(110,231,183,1); border-color: rgba(110,231,183,0.40); background: rgba(110,231,183,0.12); }
 
     #calcModal .calcTopRight{ display:flex; gap:8px; align-items:center; }
     #calcModal .calcIconBtn{
@@ -228,16 +231,16 @@
       min-width:32px;
       padding:6px 10px;
       border-radius:999px;
-      border:1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.03);
-      color: rgba(244,244,247,0.62);
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: rgba(244,244,247,0.72);
       font-size:16px;
       font-weight:700;
       line-height:1;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
-    #calcModal .calcIconBtn:active{ background: rgba(255,255,255,0.06); }
+    #calcModal .calcIconBtn:active{ background: rgba(255,255,255,0.08); }
 
     #calcModal .calcBgEditInput{
       width:5ch;
@@ -251,7 +254,7 @@
 
     #calcModal .calcMiniLine{
       display:flex; gap:12px; flex-wrap:wrap;
-      color: rgba(244,244,247,0.62);
+      color: rgba(244,244,247,0.68);
       font-size:13px;
       align-items:center;
       margin-top:8px;
@@ -263,8 +266,8 @@
       height:140px;
       display:block;
       border-radius:14px;
-      background: rgba(255,255,255,0.02);
-      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.12);
       margin-top:12px;
     }
 
@@ -272,8 +275,8 @@
       width:100%;
       padding:10px 12px;
       border-radius:14px;
-      border:1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
       color: rgba(244,244,247,1);
       font-weight:650;
       letter-spacing:0.2px;
@@ -287,7 +290,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     #calcModal .calcTimeDisplay > div{ min-width:0; }
-    #calcModal .calcTimeDisplay span{ color: rgba(244,244,247,0.62); font-weight:600; font-size:12px; flex:0 0 auto; }
+    #calcModal .calcTimeDisplay span{ color: rgba(244,244,247,0.70); font-weight:600; font-size:12px; flex:0 0 auto; }
 
     #calcModal .calcBtnRow{
       display:flex;
@@ -295,13 +298,13 @@
       margin-top:10px;
       border-radius:14px;
       overflow:hidden;
-      border:1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.03);
     }
     #calcModal .calcBtn{
       flex:1;
       border:0;
-      border-right:1px solid rgba(255,255,255,0.10);
+      border-right:1px solid rgba(255,255,255,0.12);
       background: transparent;
       color: rgba(244,244,247,1);
       padding:10px 8px;
@@ -314,7 +317,7 @@
       white-space:nowrap;
     }
     #calcModal .calcBtn:last-child{ border-right:0; }
-    #calcModal .calcBtn:active{ background: rgba(255,255,255,0.06); }
+    #calcModal .calcBtn:active{ background: rgba(255,255,255,0.08); }
 
     #calcModal .calcInputs{
       display:flex;
@@ -326,8 +329,8 @@
     #calcModal .calcField{
       flex:1 1 0;
       min-width:0;
-      background: rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.12);
       border-radius:14px;
       padding:10px 12px;
       display:flex;
@@ -337,7 +340,7 @@
       min-height:44px;
     }
     #calcModal .calcField label{
-      color: rgba(244,244,247,0.62);
+      color: rgba(244,244,247,0.70);
       font-size:12px;
       white-space:nowrap;
       flex:0 0 auto;
@@ -366,10 +369,10 @@
       letter-spacing:-0.8px;
       color: rgba(244,244,247,1);
     }
-    #calcModal .calcDoseUnit{ font-size:16px; font-weight:650; color: rgba(244,244,247,0.62); margin-left:6px; }
-    #calcModal .calcDivider{ height:1px; background: rgba(255,255,255,0.10); margin: 10px 0 8px; opacity:0.8; }
+    #calcModal .calcDoseUnit{ font-size:16px; font-weight:650; color: rgba(244,244,247,0.70); margin-left:6px; }
+    #calcModal .calcDivider{ height:1px; background: rgba(255,255,255,0.12); margin: 10px 0 8px; opacity:0.9; }
     #calcModal .calcDoseBreak{
-      color: rgba(244,244,247,0.62);
+      color: rgba(244,244,247,0.70);
       font-size:12px;
       display:flex;
       gap:12px;
@@ -378,12 +381,6 @@
     #calcModal .calcDoseBreak strong{ color: rgba(244,244,247,1); font-weight:650; }
 
     #calcModal .calcHidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
-
-    #calcModal .calcCloseBtn{
-      flex:0 0 auto;
-      min-width: 54px;
-      text-align:center;
-    }
 
     #calcModal .calcHeaderLine{
       display:flex;
@@ -396,7 +393,7 @@
       font-size: 14px;
       font-weight: 750;
       letter-spacing: 0.2px;
-      color: rgba(244,244,247,0.88);
+      color: rgba(244,244,247,0.92);
       user-select:none;
     }
   </style>
@@ -462,7 +459,6 @@
               <button class="calcBtn" data-calc-add="5">+5분</button>
               <button class="calcBtn" data-calc-add="10">+10분</button>
               <button class="calcBtn" data-calc-add="30">+30분</button>
-              <button id="calcCloseBtn" class="calcBtn calcCloseBtn" type="button" aria-label="닫기">X</button>
             </div>
 
             <input id="calc_atTime" class="calcHidden" type="datetime-local" />
@@ -630,7 +626,7 @@ function getDiaAndCarbsHr(profileJson){
 }
 
 /* =========================
-   IOB/COB 계산 (모니터 기준과 동일)
+   IOB/COB 계산
 ========================= */
 const IOB_PEAK_MIN = 94;
 const COB_DELAY_MIN = 23;
@@ -986,17 +982,17 @@ async function loadData(){
   cachedCarbsHr = pe.carbsHr;
 }
 
-/* =========================
-   페더(경계 부드럽게): bgFill로 차트를 자연스럽게 날림
-========================= */
-function drawFeatherToBg(ctx, x0, w, cssH, bgFill){
-  if (w <= 0) return;
-  const c = parseRgba(bgFill);
-  const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
-  g.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0.00)`);
-  g.addColorStop(1, `rgba(${c.r},${c.g},${c.b},0.78)`);
+function drawEdgeFeather(ctx, xStart, width, cssH, direction){
+  const g = ctx.createLinearGradient(
+    direction === "toRight" ? xStart : (xStart + width),
+    0,
+    direction === "toRight" ? (xStart + width) : xStart,
+    0
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.28)");
   ctx.fillStyle = g;
-  ctx.fillRect(x0, 0, w, cssH);
+  ctx.fillRect(xStart, 0, width, cssH);
 }
 
 function tickAnim(){
@@ -1023,11 +1019,6 @@ function tickAnim(){
 
   applyStageColor(bgFill);
 
-  /* 빈 영역/잔상 방지: 매 프레임 bgFill로 바닥을 깔고 시작 */
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = bgFill;
-  ctx.fillRect(0, 0, cssW, cssH);
-
   const now = performance.now();
 
   if (anim.mode === "shift"){
@@ -1035,17 +1026,10 @@ function tickAnim(){
     const k = easeInOutQuint(t);
     const shift = anim.shiftPx * k;
 
-    const gapX = cssW - shift;
     ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
 
-    /* 이동 중 오른쪽 빈 부분은 bgFill 유지 */
-    if (shift > 0){
-      ctx.fillStyle = bgFill;
-      ctx.fillRect(gapX, 0, shift, cssH);
-
-      const featherW = Math.min(56, Math.max(18, shift * 0.22));
-      drawFeatherToBg(ctx, Math.max(0, gapX - featherW), featherW, cssH, bgFill);
-    }
+    const featherW = Math.min(42, Math.max(18, anim.shiftPx * 0.18));
+    drawEdgeFeather(ctx, cssW - featherW, featherW, cssH, "toRight");
 
     if (t >= 1){
       anim.mode = "reveal";
@@ -1062,10 +1046,6 @@ function tickAnim(){
 
     ctx.drawImage(bufOld, -anim.shiftPx, 0, cssW, cssH);
 
-    /* 남은 빈 부분은 bgFill 유지 */
-    ctx.fillStyle = bgFill;
-    ctx.fillRect(gapX, 0, anim.shiftPx, cssH);
-
     const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
     if (clipW > 0){
       ctx.save();
@@ -1075,9 +1055,11 @@ function tickAnim(){
       ctx.drawImage(bufNew, 0, 0, cssW, cssH);
       ctx.restore();
 
-      const leadX = gapX + clipW;
-      const featherW = Math.min(60, Math.max(18, clipW * 0.25));
-      drawFeatherToBg(ctx, Math.max(gapX, leadX - featherW), featherW, cssH, bgFill);
+      const featherW = Math.min(44, Math.max(18, anim.shiftPx * 0.22));
+      const edgeX = gapX + clipW - featherW;
+      if (edgeX >= gapX){
+        drawEdgeFeather(ctx, edgeX, featherW, cssH, "toRight");
+      }
     }
 
     if (t >= 1){
@@ -1144,9 +1126,7 @@ function renderMonitor(){
     drawSmoothAreaTo(bufOld, series0, nextFill);
     drawSmoothAreaTo(bufNew, series0, nextFill);
     lastRenderedEndMs = latestMs;
-
-    /* 첫 화면 즉시 그리기 보장 */
-    tickAnim();
+    if (!isAnimating()) requestAnimationFrame(tickAnim);
     return;
   }
 
@@ -1166,14 +1146,11 @@ function renderMonitor(){
     anim.revealW = 0;
 
     lastRenderedEndMs = latestMs;
-
-    /* 애니메이션 시작 프레임 즉시 그리기 */
-    tickAnim();
+    requestAnimationFrame(tickAnim);
     return;
   }
 
-  /* 데이터 갱신이 없더라도 색상 전환 등 반영 */
-  tickAnim();
+  if (!isAnimating()) requestAnimationFrame(tickAnim);
 }
 
 function updateMonitorIobCobRealtime(){
@@ -1257,7 +1234,7 @@ function drawCalcChart(canvas, points){
 
   ctx.globalAlpha = 0.9;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
   for (let i=1;i<=3;i++){
     const y = padY + (ih/4)*i;
     ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX+iw, y); ctx.stroke();
@@ -1296,22 +1273,23 @@ function drawCalcChart(canvas, points){
   ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI*2); ctx.fill();
 
   ctx.font = "600 22px -apple-system, system-ui, Segoe UI, Roboto, sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
   ctx.fillText(String(Math.round(last.v)), Math.min(lx+14, w-60), Math.max(ly-12, 28));
 }
 
-function calcGetRealtimeIobCob(){
+/* 선택한 기준시간(atMs)으로 IOB/COB 계산 */
+function calcGetIobCobAt(atMs){
   if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
-  const nowMs = Date.now();
+
   const dia = cachedDia;
   const carbsHr = cachedCarbsHr;
 
   const iob = (Number.isFinite(dia) && dia > 0)
-    ? computeIOB(cachedTreatments, nowMs, dia)
+    ? computeIOB(cachedTreatments, atMs, dia)
     : null;
 
   const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
-    ? computeCOB(cachedTreatments, nowMs, carbsHr)
+    ? computeCOB(cachedTreatments, atMs, carbsHr)
     : null;
 
   return { iob, cob };
@@ -1321,6 +1299,7 @@ function calcUpdateUI(){
   if (!cachedProfile || !cachedEntries) return;
 
   const atDate = parseLocalInputToDate(document.getElementById("calc_atTime").value);
+  const atMs = atDate.getTime();
   document.getElementById("calc_timeLabel").textContent = formatKST(atDate);
 
   const prof = getProfileAt(cachedProfile, atDate);
@@ -1363,7 +1342,7 @@ function calcUpdateUI(){
     pill.className = "calcDelta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
   }
 
-  const endT = Math.min(atDate.getTime(), safeNum(latest?.date, atDate.getTime()) ?? atDate.getTime());
+  const endT = Math.min(atMs, safeNum(latest?.date, atMs) ?? atMs);
   const startT = endT - 60*60*1000;
 
   const series = (Array.isArray(cachedEntries) ? cachedEntries : [])
@@ -1381,7 +1360,8 @@ function calcUpdateUI(){
 
   drawCalcChart(document.getElementById("calc_chart"), series);
 
-  const rt = calcGetRealtimeIobCob();
+  /* 기준시간 기반 IOB/COB 표시 및 차감 */
+  const rt = calcGetIobCobAt(atMs);
   document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
   document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
 
@@ -1504,8 +1484,11 @@ async function refresh(){
       ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
     }
     updateMonitorIobCobRealtime();
+
+    /* 계산기 열려있으면 선택한 기준시간 기반으로 IOB/COB를 계속 갱신 */
     if (isCalcOpen()){
-      const rt = calcGetRealtimeIobCob();
+      const atDate = parseLocalInputToDate(document.getElementById("calc_atTime").value);
+      const rt = calcGetIobCobAt(atDate.getTime());
       document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
       document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
       document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
@@ -1533,23 +1516,26 @@ async function refresh(){
     window.visualViewport.addEventListener("scroll", () => { resizeStage(); });
   }
 
+  // 모니터 화면 아무 곳 클릭하면 모달 오픈 (모달이 닫혀 있을 때만)
   const stage = document.getElementById("stage");
   stage.addEventListener("pointerdown", (e) => {
     if (isCalcOpen()) return;
     openCalcModal();
   });
 
+  // 모달 내부 이벤트 (닫기)
   document.getElementById("calcBackdrop").addEventListener("pointerdown", (e) => {
     e.preventDefault();
     closeCalcModal();
   });
-  document.getElementById("calcCloseBtn").addEventListener("click", closeCalcModal);
   document.getElementById("calcCloseTop").addEventListener("click", closeCalcModal);
 
+  // 모달 시트 내부 클릭은 배경 이벤트로 전파되지 않게
   document.getElementById("calcSheet").addEventListener("pointerdown", (e) => {
     e.stopPropagation();
   });
 
+  // 계산기 입력/버튼
   document.getElementById("calc_timeDisplay").addEventListener("click", () => {
     const input = document.getElementById("calc_atTime");
     if (input.showPicker) input.showPicker();
@@ -1572,6 +1558,7 @@ async function refresh(){
   document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_targetIn").addEventListener("input", calcUpdateUI);
 
+  // 혈당 수동 입력
   const editBtn = document.getElementById("calc_editBgBtn");
   editBtn.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -1587,6 +1574,7 @@ async function refresh(){
     if (calcManualBg === null) calcBeginBgEdit();
   });
 
+  // ESC로 닫기
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isCalcOpen()){
       closeCalcModal();
