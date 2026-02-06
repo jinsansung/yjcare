@@ -45,25 +45,7 @@
       touch-action: manipulation;
       overscroll-behavior: none;
     }
-    #calcSheet{
-      position:absolute;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding: calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
-    }
 
-    #calcModal .calcWrap{
-      width: min(520px, 100%);
-      max-height: 100%;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    #calcModal .calcStack{
-      padding-bottom: 12px;
-    }
     .stage{
       position:fixed;
       inset:0;
@@ -72,7 +54,6 @@
       overflow:hidden;
       background:#000;
     }
-
     #bgCanvas{
       position:absolute;
       inset:0;
@@ -100,7 +81,6 @@
       gap:10px;
       text-align:center;
     }
-
     .mainRow{
       display:flex;
       align-items:center;
@@ -108,7 +88,6 @@
       gap:18px;
       width:100%;
     }
-
     .bg{
       font-size:192px;
       line-height:0.92;
@@ -117,7 +96,6 @@
       color:var(--text);
       text-align:center;
     }
-
     .arrow{
       font-size:88px;
       font-weight:850;
@@ -129,7 +107,6 @@
       white-space:nowrap;
       transform: translateY(2px);
     }
-
     .subRow{
       display:flex;
       align-items:center;
@@ -172,6 +149,22 @@
     }
 
     /* ===== 계산기 모달 (스코프) ===== */
+    #calcSheet{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+    }
+    #calcModal .calcWrap{
+      width: min(520px, 100%);
+      max-height: 100%;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #calcModal .calcStack{ padding-bottom: 12px; }
+
     #calcModal{
       position:fixed;
       inset:0;
@@ -257,16 +250,6 @@
       margin-top:8px;
     }
     #calcModal .calcMiniLine strong{ color: rgba(244,244,247,1); font-weight:650; letter-spacing:0.2px; }
-
-    #calcModal canvas.calcChart{
-      width:100%;
-      height:140px;
-      display:block;
-      border-radius:14px;
-      background: rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.12);
-      margin-top:12px;
-    }
 
     #calcModal .calcTimeDisplay{
       width:100%;
@@ -441,7 +424,6 @@
               <span>IOB <strong id="calc_iobTxt">--</strong>U</span>
               <span>COB <strong id="calc_cobTxt">--</strong>g</span>
             </div>
-
           </div>
 
           <div class="calcCard">
@@ -554,13 +536,6 @@ function animateText(el, nextText, dir){
   void el.offsetWidth;
   el.classList.add(dir === "down" ? "rollDown" : "rollUp");
   window.setTimeout(() => el.classList.remove("rollUp","rollDown"), 480);
-}
-
-/* =========================
-   easing
-========================= */
-function easeInOutQuint(t){
-  return t < 0.5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2, 5)/2;
 }
 
 /* =========================
@@ -693,7 +668,7 @@ function computeCOB(treatments, atMs, carbsHr){
 }
 
 /* =========================
-   컬러 (모니터)
+   컬러
 ========================= */
 function colorForBg(bg){
   if (!Number.isFinite(bg)) return "rgba(255,255,255,0.10)";
@@ -710,15 +685,6 @@ function parseRgba(str){
   return { r:+m[1], g:+m[2], b:+m[3], a:+m[4] };
 }
 function lerp(a,b,t){ return a + (b-a)*t; }
-function lerpColor(c1, c2, t){
-  const a = parseRgba(c1), b = parseRgba(c2);
-  const r = Math.round(lerp(a.r,b.r,t));
-  const g = Math.round(lerp(a.g,b.g,t));
-  const bb= Math.round(lerp(a.b,b.b,t));
-  const aa= +lerp(a.a,b.a,t).toFixed(3);
-  return `rgba(${r},${g},${bb},${aa})`;
-}
-const BG_DARK_MIX = 0.62;
 function darkenRgba(rgbaStr, mixToBlack){
   const c = parseRgba(rgbaStr);
   const tt = clamp01(mixToBlack);
@@ -727,6 +693,7 @@ function darkenRgba(rgbaStr, mixToBlack){
   const b = Math.round(c.b * (1 - tt));
   return `rgba(${r},${g},${b},1)`;
 }
+const BG_DARK_MIX = 0.62;
 function applyStageColor(rgba){
   const stage = document.getElementById("stage");
   if (stage) stage.style.background = rgba;
@@ -734,39 +701,11 @@ function applyStageColor(rgba){
   document.body.style.background = rgba;
 }
 
-let colorAnim = {
-  active:false,
-  from:"rgba(255,255,255,0.10)",
-  to:"rgba(255,255,255,0.10)",
-  start:0,
-  dur:1600
-};
-function startColorTransition(next){
-  if (!colorAnim.to){
-    colorAnim.from = next;
-    colorAnim.to = next;
-    colorAnim.active = false;
-    return;
-  }
-  if (next === colorAnim.to) return;
-  colorAnim.active = true;
-  colorAnim.from = colorAnim.to;
-  colorAnim.to = next;
-  colorAnim.start = performance.now();
-}
-function currentFillColor(){
-  if (!colorAnim.active) return colorAnim.to;
-  const now = performance.now();
-  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
-  const k = easeInOutQuint(t);
-  const c = lerpColor(colorAnim.from, colorAnim.to, k);
-  if (t >= 1) colorAnim.active = false;
-  return c;
-}
-
 /* =========================
-   모니터 그래프 (1시간 area)
+   모니터 그래프 (1시간 area) - dry refresh
 ========================= */
+const CHART_AREA_ALPHA = 0.56;
+
 function buildSeriesFor1h(entries, endMs){
   const windowMs = 60*60*1000;
   const startMs = endMs - windowMs;
@@ -780,7 +719,6 @@ function buildSeriesFor1h(entries, endMs){
     return { startMs, endMs, series: [] };
   }
 
-  // startMs 이전의 가장 가까운 값(없으면 startMs 이후 첫 값)
   let anchor = null;
   for (let i=points.length-1;i>=0;i--){
     if (points[i].t <= startMs){ anchor = points[i]; break; }
@@ -794,7 +732,6 @@ function buildSeriesFor1h(entries, endMs){
   const inWindow = points.filter(p => p.t >= startMs && p.t <= endMs);
   const merged = [{ t: startMs, v: anchor.v }, ...inWindow];
 
-  // 1분 단위로 리샘플(1시간을 화면 전체 폭에 매핑하기 위한 고정 타임라인)
   const stepMs = 60 * 1000;
   const resampled = [];
   let j = 0;
@@ -822,8 +759,6 @@ function buildSeriesFor1h(entries, endMs){
   return { startMs, endMs, series: resampled };
 }
 
-const CHART_AREA_ALPHA = 0.56;
-
 /* =========================
    monotone cubic (오버슈트 방지)
 ========================= */
@@ -848,7 +783,6 @@ function buildMonotoneTangents(pts){
     m[i] = (d[i-1] + d[i]) / 2;
   }
 
-  // Fritsch-Carlson monotone enforcement
   for (let i = 0; i < n - 1; i++){
     if (d[i] === 0){
       m[i] = 0;
@@ -864,7 +798,6 @@ function buildMonotoneTangents(pts){
       }
     }
   }
-
   return m;
 }
 
@@ -874,10 +807,11 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
   const endMs = seriesObj?.endMs;
   const ctx = canvas.getContext("2d", { alpha: true });
 
-  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const cssW = canvas._cssW || window.innerWidth;
-  const cssH = canvas._cssH || window.innerHeight;
+  const vv = window.visualViewport;
+  const cssW = Math.floor((vv && vv.width) ? vv.width : window.innerWidth);
+  const cssH = Math.floor((vv && vv.height) ? vv.height : window.innerHeight);
 
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   canvas.width = Math.floor(cssW * dpr);
   canvas.height = Math.floor(cssH * dpr);
   canvas.style.width = cssW + "px";
@@ -901,18 +835,10 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
   const minY = 40;
   const maxY = 401;
 
-  const minX = startMs;
-  const maxX = endMs;
-
-  const w = cssW;
-  const h = cssH;
-
-  const xMap = (t) => ((t - minX) / (maxX - minX)) * w;
-  const yMap = (v) => (1 - ((v - minY) / (maxY - minY))) * h;
+  const xMap = (t) => ((t - startMs) / (endMs - startMs)) * cssW;
+  const yMap = (v) => (1 - ((v - minY) / (maxY - minY))) * cssH;
 
   const pts = series.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
-
-  // monotone cubic -> bezier control points
   const tangents = buildMonotoneTangents(pts);
 
   ctx.globalAlpha = CHART_AREA_ALPHA;
@@ -951,66 +877,20 @@ function drawSmoothArea(canvas, seriesObj, fillColor){
 }
 
 /* =========================
-   오프스크린 버퍼 & 애니메이션
+   데이터 캐시
 ========================= */
-let bufOld = document.createElement("canvas");
-let bufNew = document.createElement("canvas");
-
-function ensureBufferSize(buf, cssW, cssH){
-  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const w = Math.floor(cssW * dpr);
-  const h = Math.floor(cssH * dpr);
-  if (buf.width !== w || buf.height !== h){
-    buf.width = w;
-    buf.height = h;
-  }
-  buf._cssW = cssW;
-  buf._cssH = cssH;
-}
-function drawSmoothAreaTo(buf, series, fillColor){
-  buf._cssW = buf._cssW ?? window.innerWidth;
-  buf._cssH = buf._cssH ?? window.innerHeight;
-  drawSmoothArea(buf, series, fillColor);
-}
-
-function resizeStage(){
-  const stage = document.getElementById("stage");
-  const canvas = document.getElementById("bgCanvas");
-  const vv = window.visualViewport;
-
-  const w = Math.floor((vv && vv.width) ? vv.width : window.innerWidth);
-  const h = Math.floor((vv && vv.height) ? vv.height : window.innerHeight);
-
-  stage.style.width = w + "px";
-  stage.style.height = h + "px";
-  canvas._cssW = w;
-  canvas._cssH = h;
-}
-
 let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
-
-let latestEntryMsForAge = null;
-let lastBgValue = null;
-let lastRenderedEndMs = null;
-
 let cachedDia = null;
 let cachedCarbsHr = null;
 
-let anim = {
-  mode: "none",
-  start: 0,
-  shiftPx: 0,
-  durShift: 1050,
-  durReveal: 820,
-  revealW: 0
-};
+let latestEntryMsForAge = null;
+let lastBgValue = null;
 
-function isAnimating(){
-  return anim.mode !== "none" || colorAnim.active;
-}
-
+/* =========================
+   데이터 로드
+========================= */
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
@@ -1024,150 +904,6 @@ async function loadData(){
   const pe = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
   cachedDia = pe.dia;
   cachedCarbsHr = pe.carbsHr;
-}
-
-function drawEdgeFeather(ctx, xStart, width, cssH, direction){
-  const g = ctx.createLinearGradient(
-    direction === "toRight" ? xStart : (xStart + width),
-    0,
-    direction === "toRight" ? (xStart + width) : xStart,
-    0
-  );
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.28)");
-  ctx.fillStyle = g;
-  ctx.fillRect(xStart, 0, width, cssH);
-}
-
-function tickAnim(){
-  const canvas = document.getElementById("bgCanvas");
-  const ctx = canvas.getContext("2d", { alpha:true });
-
-  const cssW = canvas._cssW || window.innerWidth;
-  const cssH = canvas._cssH || window.innerHeight;
-
-  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const w = Math.floor(cssW * dpr);
-  const h = Math.floor(cssH * dpr);
-  if (canvas.width !== w || canvas.height !== h){
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = cssW + "px";
-    canvas.style.height = cssH + "px";
-  }
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,cssW,cssH);
-
-  const fill = currentFillColor();
-  const bgFill = darkenRgba(fill, BG_DARK_MIX);
-  applyStageColor(bgFill);
-
-  const now = performance.now();
-
-  if (anim.mode === "shift"){
-    const t = Math.min(1, (now - anim.start) / anim.durShift);
-    const k = easeInOutQuint(t);
-    const shift = anim.shiftPx * k;
-
-    // 스케일링 금지, 크롭해서 이동 (round로 통일)
-    const sx = Math.round(shift * dpr);
-    const sw = Math.round((cssW - shift) * dpr);
-    const sh = Math.round(cssH * dpr);
-
-    const dx = 0;
-    const dw = (cssW - shift);
-    const dh = cssH;
-
-    if (sw > 0 && dw > 0){
-      ctx.drawImage(bufOld, sx, 0, sw, sh, dx, 0, dw, dh);
-    }
-
-    // 오른쪽 빈 영역은 배경만 보이게 두고, 경계에 페더만
-    const boundaryX = cssW - shift;
-    const featherW = Math.min(54, Math.max(20, anim.shiftPx * 0.25));
-    drawEdgeFeather(ctx, boundaryX, featherW, cssH, "toRight");
-
-    if (t >= 1){
-      anim.mode = "reveal";
-      anim.start = now;
-      anim.revealW = 0;
-    }
-  }
-  else if (anim.mode === "reveal"){
-    const t = Math.min(1, (now - anim.start) / anim.durReveal);
-    const k = easeInOutQuint(t);
-    anim.revealW = anim.shiftPx * k;
-
-    const gapX = cssW - anim.shiftPx;
-    const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
-
-    // 왼쪽: old를 최종 shift 상태로 고정 (round로 통일)
-    {
-      const sx = Math.round(anim.shiftPx * dpr);
-      const sw = Math.round((cssW - anim.shiftPx) * dpr);
-      const sh = Math.round(cssH * dpr);
-      const dw = cssW - anim.shiftPx;
-
-      if (sw > 0 && dw > 0){
-        ctx.drawImage(bufOld, sx, 0, sw, sh, 0, 0, dw, cssH);
-      }
-    }
-
-    // 오른쪽: new를 채우되, 경계 오버랩 + 알파 블렌딩으로 이음새 제거
-    if (clipW > 0){
-      const overlap = Math.min(48, Math.max(18, anim.shiftPx * 0.18));
-
-      const drawX = gapX - overlap;
-      const drawW = clipW + overlap;
-
-      const srcX = Math.round((cssW - anim.shiftPx - overlap) * dpr);
-      const sh2  = Math.round(cssH * dpr);
-
-      const srcX2 = Math.max(0, srcX);
-      const cutLeftPx = (srcX2 - srcX) / dpr;
-      const drawX2 = drawX + cutLeftPx;
-      const drawW2 = drawW - cutLeftPx;
-      const srcW2  = Math.round(drawW2 * dpr);
-
-      if (srcW2 > 0 && drawW2 > 0){
-        ctx.save();
-
-        // 현재 채워져야 하는 영역만 클립
-        ctx.beginPath();
-        ctx.rect(gapX - overlap, 0, clipW + overlap, cssH);
-        ctx.clip();
-
-        // new 슬라이스(오버랩 포함)
-        ctx.drawImage(bufNew, srcX2, 0, srcW2, sh2, drawX2, 0, drawW2, cssH);
-
-        // 오버랩 구간만 그라데이션 알파로 부드럽게(하드 컷 방지)
-        ctx.globalCompositeOperation = "destination-in";
-        const g = ctx.createLinearGradient(gapX - overlap, 0, gapX, 0);
-        g.addColorStop(0, "rgba(0,0,0,0)");
-        g.addColorStop(1, "rgba(0,0,0,1)");
-        ctx.fillStyle = g;
-        ctx.fillRect(gapX - overlap, 0, overlap, cssH);
-
-        // gapX 이후는 100% 유지
-        ctx.fillStyle = "rgba(0,0,0,1)";
-        ctx.fillRect(gapX, 0, clipW, cssH);
-
-        ctx.restore();
-      }
-    }
-
-    if (t >= 1){
-      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
-      anim.mode = "none";
-    }
-  }
-  else{
-    ctx.drawImage(bufOld, 0, 0, cssW, cssH);
-  }
-
-  if (isAnimating()){
-    requestAnimationFrame(tickAnim);
-  }
 }
 
 /* =========================
@@ -1206,48 +942,15 @@ function renderMonitor(){
   ageEl.textContent = formatAge(Date.now() - latestMs);
   chgEl.textContent = (delta === null) ? "--" : ((delta > 0 ? "+" : "") + String(Math.round(delta)));
 
-  const nextFill = colorForBg(latestV);
-  startColorTransition(nextFill);
+  // 배경색 적용(드라이)
+  const fill = colorForBg(latestV);
+  const bgFill = darkenRgba(fill, BG_DARK_MIX);
+  applyStageColor(bgFill);
 
+  // 1시간 창을 화면폭에 맞춰 매번 다시 그림(애니메이션 없음)
   const canvas = document.getElementById("bgCanvas");
-  const cssW = canvas._cssW || window.innerWidth;
-  const cssH = canvas._cssH || window.innerHeight;
-  ensureBufferSize(bufOld, cssW, cssH);
-  ensureBufferSize(bufNew, cssW, cssH);
-
-  // 1시간은 항상 화면 폭에 들어가도록: startMs/endMs는 buildSeriesFor1h가 책임
-  if (!Number.isFinite(lastRenderedEndMs)){
-    const series0 = buildSeriesFor1h(cachedEntries, latestMs);
-    drawSmoothAreaTo(bufOld, series0, nextFill);
-    drawSmoothAreaTo(bufNew, series0, nextFill);
-    lastRenderedEndMs = latestMs;
-
-    requestAnimationFrame(tickAnim);
-    return;
-  }
-
-  if (latestMs > lastRenderedEndMs){
-    const seriesNew = buildSeriesFor1h(cachedEntries, latestMs);
-    drawSmoothAreaTo(bufNew, seriesNew, nextFill);
-
-    const dt = latestMs - lastRenderedEndMs;
-    const windowMs = 60 * 60 * 1000;
-
-    // 한시간이 화면폭 전체이므로 dt/windowMs 비율만큼 픽셀 이동
-    const rawShift = cssW * (dt / windowMs);
-    const shiftPx = Math.max(10, Math.min(cssW * 0.40, rawShift));
-
-    anim.mode = "shift";
-    anim.start = performance.now();
-    anim.shiftPx = shiftPx;
-    anim.revealW = 0;
-
-    lastRenderedEndMs = latestMs;
-    requestAnimationFrame(tickAnim);
-    return;
-  }
-
-  if (!isAnimating()) requestAnimationFrame(tickAnim);
+  const series = buildSeriesFor1h(cachedEntries, latestMs);
+  drawSmoothArea(canvas, series, fill);
 }
 
 function updateMonitorIobCobRealtime(){
@@ -1320,8 +1023,6 @@ function pickLatestEntry(entries){
   }
   return best;
 }
-
-/* 선택한 기준시간(atMs)으로 IOB/COB 계산 */
 function calcGetIobCobAt(atMs){
   if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
 
@@ -1386,7 +1087,6 @@ function calcUpdateUI(){
     pill.className = "calcDelta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
   }
 
-  /* 기준시간 기반 IOB/COB 표시 및 차감 */
   const rt = calcGetIobCobAt(atMs);
   document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
   document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
@@ -1468,15 +1168,32 @@ function openCalcModal(){
   calcSetManualBg(null);
   calcUpdateUI();
 }
-
 function closeCalcModal(){
   const modal = document.getElementById("calcModal");
   modal.classList.remove("isOpen");
   modal.setAttribute("aria-hidden", "true");
 }
-
 function isCalcOpen(){
   return document.getElementById("calcModal").classList.contains("isOpen");
+}
+
+/* =========================
+   뷰포트 리사이즈
+========================= */
+function resizeStage(){
+  const stage = document.getElementById("stage");
+  const canvas = document.getElementById("bgCanvas");
+  const vv = window.visualViewport;
+
+  const w = Math.floor((vv && vv.width) ? vv.width : window.innerWidth);
+  const h = Math.floor((vv && vv.height) ? vv.height : window.innerHeight);
+
+  stage.style.width = w + "px";
+  stage.style.height = h + "px";
+
+  // 다음 draw에서 canvas 사이즈 맞춰짐
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
 }
 
 /* =========================
@@ -1522,21 +1239,13 @@ async function refresh(){
 
   window.addEventListener("resize", () => {
     resizeStage();
-    try{
-      lastRenderedEndMs = null;
-      anim.mode = "none";
-      renderMonitor();
-    }catch(_){}
+    try{ renderMonitor(); }catch(_){}
   });
 
   if (window.visualViewport){
     window.visualViewport.addEventListener("resize", () => {
       resizeStage();
-      try{
-        lastRenderedEndMs = null;
-        anim.mode = "none";
-        renderMonitor();
-      }catch(_){}
+      try{ renderMonitor(); }catch(_){}
     });
     window.visualViewport.addEventListener("scroll", () => { resizeStage(); });
   }
