@@ -2,201 +2,390 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="YJCARE">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="color-scheme" content="dark" />
-  <title>YJCARE Monitor</title>
+  <title>YJCARE</title>
+
   <style>
     :root{
-      --bg:#000000;
+      --bg:#0b0b0f;
       --text:#f4f4f7;
-      --muted:rgba(244,244,247,0.68);
+      --muted:#a7a7b3;
+      --hair:#262633;
+
+      /* 현재 혈당 기반 “페이지 전체 톤” */
+      --pageTint: rgba(110,231,183,0.20);
+      --pageTintStrong: rgba(110,231,183,0.34);
+
+      --manual:#ffd166;
     }
+
     *{box-sizing:border-box}
-    html,body{
-      width:100%;
-      height:100%;
-      margin:0;
-      background:var(--bg);
-      overflow:hidden;
-    }
+    html,body{height:100%; width:100%; margin:0; overflow:hidden;}
     body{
+      background: var(--bg);
+      color: var(--text);
       font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
       -webkit-font-smoothing:antialiased;
       text-rendering:optimizeLegibility;
+
+      /* 중요: body 자체에 safe-area padding을 주면 “바깥 여백”이 생깁니다.
+         safe-area는 컨텐츠 래퍼에서만 처리하고, body는 전체 배경을 꽉 채웁니다. */
+      padding:0;
     }
 
-    #bgCanvas{
+    /* 화면 전체 배경을 현재혈당 컬러로 채움(좌우 여백/하단 블랙 방지) */
+    body::before{
+      content:"";
       position:fixed;
       inset:0;
-      width:100%;
-      height:100%;
-      display:block;
-      z-index:0;
-      background:#000;
-    }
-
-    .overlay{
-      position:fixed;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding: 12px;
+      background:
+        linear-gradient(180deg, rgba(0,0,0,0.80), rgba(0,0,0,0.55)),
+        radial-gradient(1200px 520px at 50% 20%, var(--pageTintStrong), transparent 62%),
+        linear-gradient(180deg, var(--pageTint), rgba(0,0,0,0.06));
+      z-index:-2;
       pointer-events:none;
-      z-index:2;
     }
-    .panel{
-      width:100%;
-      max-width: 900px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap: 10px;
-      text-align:center;
+    body::after{
+      content:"";
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.10);
+      z-index:-1;
+      pointer-events:none;
     }
 
-    .mainRow{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap: 18px;
-      width:100%;
+    button, .btn, .timeDisplay { touch-action: manipulation; }
+
+    /* 모바일에서 전체 텍스트 80% */
+    @media (pointer: coarse){
+      html{ font-size: 80%; }
     }
 
-    .bg{
-      font-size: 192px;
-      line-height: 0.92;
-      font-weight: 850;
-      letter-spacing: -2.2px;
+    /* 컨텐츠 래퍼에서 safe-area 처리 */
+    .wrap{
+      max-width:520px;
+      margin:0 auto;
+
+      padding: 14px 14px 24px;
+      padding-top: calc(14px + env(safe-area-inset-top));
+      padding-left: calc(14px + env(safe-area-inset-left));
+      padding-right: calc(14px + env(safe-area-inset-right));
+      padding-bottom: calc(24px + env(safe-area-inset-bottom));
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .stack{ display:flex; flex-direction:column; gap:12px; height:100%; overflow:auto; -webkit-overflow-scrolling: touch; }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
+      border:1px solid var(--hair);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+      backdrop-filter: blur(10px);
+    }
+
+    .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
+    .sub{ color:var(--muted); font-size:12px; letter-spacing:0.2px; }
+
+    .big{
+      font-size:56px;
+      line-height:1;
+      font-weight:750;
+      letter-spacing:-1.2px;
+    }
+    .big.manual{ color: var(--manual); }
+
+    .delta{
+      font-size:16px;
+      font-weight:650;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);               /* 요구: 모두 화이트 */
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .delta.up, .delta.down{             /* 컬러 제거 */
       color: var(--text);
-      text-align:center;
+      border-color: var(--hair);
+      background: rgba(255,255,255,0.03);
     }
 
-    .arrow{
-      font-size: 88px;
-      font-weight: 850;
-      letter-spacing: -1px;
-      color: var(--muted);
-      min-width: 96px;
-      text-align:center;
-      line-height: 1;
-      white-space:nowrap;
-      transform: translateY(2px);
-    }
-    .arrow.up{ color: rgba(255,92,92,0.95); }
-    .arrow.down{ color: rgba(110,231,183,0.95); }
-    .arrow.flat{ color: rgba(244,244,247,0.68); }
+    .topRight{ display:flex; gap:8px; align-items:center; }
 
-    /* base는 절대 숨기지 않음 */
-    .rollBase{
-      position:relative;
-      display:inline-block;
-      height:1em;
-      min-height:1em;
-      overflow:hidden; /* ghost만 잘라냄 */
-    }
-    .rollBaseText{
-      display:block;
-      text-align:center;
-      white-space:nowrap;
-      transform: translateY(0);
-      opacity: 1;
-    }
-
-    /* 움직이는 복제 레이어 */
-    .ghost{
-      position:absolute;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      pointer-events:none;
-      will-change: transform, opacity;
-    }
-    .ghostText{
-      display:block;
-      width:100%;
-      text-align:center;
-      white-space:nowrap;
-    }
-
-    .subRow{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap: 22px;
-      flex-wrap:wrap;
-      color: var(--muted);
-      font-size: 24px;
+    .iconBtn{
+      height: 32px;
+      min-width: 32px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);              /* 화이트 */
+      font-size: 16px;
       font-weight: 700;
-      letter-spacing: 0.2px;
-      line-height: 1.25;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
     }
-    .subRow span b{
+    .iconBtn:active{ background: rgba(255,255,255,0.06); }
+
+    .bgEditInput{
+      width: 5ch;
+      background: transparent;
+      border: 0;
+      outline: none;
       color: var(--text);
-      font-weight: 800;
+      font: inherit;
+      text-align: left;
     }
 
-    /* 모바일: 전체 텍스트 80% */
-    @media (max-width: 900px), (pointer: coarse){
-      .bg{ font-size: 154px; }
-      .arrow{ font-size: 70px; min-width: 78px; }
-      .subRow{ font-size: 19px; gap: 14px; }
-      .panel{ gap: 8px; }
-      .mainRow{ gap: 14px; }
+    .miniLine{
+      display:flex; gap:12px; flex-wrap:wrap;
+      color: var(--muted);
+      font-size: 13px;
+      align-items:center;
+      margin-top:8px;
     }
-    @media (max-width: 520px){
-      .bg{ font-size: 140px; }
-      .arrow{ font-size: 64px; min-width: 72px; }
-      .subRow{ font-size: 18px; gap: 12px; }
-      .panel{ gap: 7px; }
-      .mainRow{ gap: 12px; }
+    .miniLine b{ color: var(--text); font-weight:650; letter-spacing:0.2px; }
+
+    canvas{
+      width:100%;
+      height:140px;
+      display:block;
+      border-radius:14px;
+      background: rgba(255,255,255,0.02);
+      border:1px solid var(--hair);
+      margin-top:12px;
     }
-    @media (max-height: 240px){
-      .bg{ font-size: 132px; }
-      .arrow{ font-size: 60px; }
-      .subRow{ font-size: 17px; gap: 12px; }
-      .panel{ gap: 6px; }
+
+    .timeDisplay{
+      width:100%;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      font-weight:650;
+      letter-spacing:0.2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+      min-width:0;
     }
+    .timeDisplay > div{ min-width:0; }
+    .timeDisplay span{ color:var(--muted); font-weight:600; font-size:12px; flex:0 0 auto; }
+
+    .btnRow{
+      display:flex;
+      gap:0;
+      margin-top:10px;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid var(--hair);
+      background: rgba(255,255,255,0.02);
+    }
+    .btn{
+      flex:1;
+      border:0;
+      border-right:1px solid var(--hair);
+      background: transparent;
+      color: var(--text);
+      padding:10px 8px;
+      font-size:12px;
+      font-weight:650;
+      min-height:40px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      white-space:nowrap;
+    }
+    .btn:last-child{ border-right:0; }
+    .btn:active{ background: rgba(255,255,255,0.06); }
+
+    .inputs{
+      display:flex;
+      gap:10px;
+      align-items:stretch;
+      margin-top:12px;
+      min-width:0;
+    }
+    .field{
+      flex:1 1 0;
+      min-width:0;
+      background: rgba(255,255,255,0.03);
+      border:1px solid var(--hair);
+      border-radius:14px;
+      padding:10px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+    }
+    .field label{
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .field input{
+      min-width:0;
+      flex:0 1 7ch;
+      max-width: 10ch;
+      width:auto;
+      background:transparent;
+      border:none;
+      outline:none;
+      color:var(--text);
+      font-size:16px;
+      text-align:right;
+      font-weight:650;
+    }
+    .field input::-webkit-outer-spin-button,
+    .field input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+    .field input[type=number]{ -moz-appearance:textfield; }
+
+    .doseBig{
+      font-size:44px;
+      line-height:1.05;
+      font-weight:780;
+      letter-spacing:-0.8px;
+    }
+    .doseUnit{ font-size:16px; font-weight:650; color:var(--muted); margin-left:6px; }
+    .divider{ height:1px; background: var(--hair); margin: 10px 0 8px; opacity:0.8; }
+    .doseBreak{
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .doseBreak b{ color:var(--text); font-weight:650; }
+
+    .hidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
   </style>
+
+  <script>
+    (async () => {
+      try {
+        const res = await fetch("/version.json", { cache: "no-store" });
+        const data = await res.json();
+        const key = "yj_app_version";
+        const prev = localStorage.getItem(key);
+
+        if (data?.v && prev && prev !== data.v) {
+          localStorage.setItem(key, data.v);
+          const u = new URL(location.href);
+          u.searchParams.set("_v", data.v);
+          location.replace(u.toString());
+          return;
+        }
+        if (data?.v && !prev) localStorage.setItem(key, data.v);
+      } catch (_) {}
+    })();
+  </script>
 </head>
+
 <body>
-  <canvas id="bgCanvas"></canvas>
+  <div class="wrap">
+    <div class="stack">
 
-  <div class="overlay">
-    <div class="panel">
-      <div class="mainRow">
-        <div class="bg">
-          <span class="rollBase" id="bgRoll">
-            <span class="rollBaseText" id="bgText">--</span>
-          </span>
+      <div class="card">
+        <div class="row" style="align-items:flex-end;">
+          <div id="bgBig" class="big">--</div>
+          <div class="topRight">
+            <div id="deltaPill" class="delta">--</div>
+            <button id="editBgBtn" class="iconBtn" type="button" aria-label="혈당 수정">✎</button>
+          </div>
         </div>
 
-        <div id="arrowWrap" class="arrow flat">
-          <span class="rollBase" id="arrowRoll">
-            <span class="rollBaseText" id="arrowText">—</span>
-          </span>
+        <div class="miniLine">
+          <span>IOB <b id="iobTxt">--</b>U</span>
+          <span>COB <b id="cobTxt">--</b>g</span>
+        </div>
+
+        <canvas id="chart" width="900" height="280"></canvas>
+      </div>
+
+      <div class="card">
+        <div id="timeDisplay" class="timeDisplay" title="탭하면 시간 직접 변경">
+          <div id="timeLabel">--</div>
+          <span>기준시간</span>
+        </div>
+
+        <div class="btnRow" aria-label="기준시간 빠른 변경">
+          <button class="btn" data-reset="1">reset</button>
+          <button class="btn" data-add="5">+5분</button>
+          <button class="btn" data-add="10">+10분</button>
+          <button class="btn" data-add="30">+30분</button>
+        </div>
+
+        <input id="atTime" class="hidden" type="datetime-local" />
+
+        <div class="inputs">
+          <div class="field">
+            <label>탄수(g)</label>
+            <input id="carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label>목표</label>
+            <input id="targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
+          </div>
         </div>
       </div>
 
-      <div class="subRow">
-        <span><b id="ageTxt">--:--</b> (<b id="chgTxt">--</b>)</span>
-        <span>IOB <b id="iobTxt">--</b>U</span>
-        <span>COB <b id="cobTxt">--</b>g</span>
+      <div class="card">
+        <div class="sub">권장 인슐린</div>
+
+        <div style="margin-top:6px;">
+          <span id="finalIns" class="doseBig">--</span><span class="doseUnit">U</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="doseBreak">
+          <span>식사 <b id="mealIns">--</b>U</span>
+          <span>보정 <b id="corrIns">--</b>U</span>
+          <span>IOB <b id="iobSub">--</b>U</span>
+        </div>
       </div>
+
     </div>
   </div>
 
 <script>
-/* ===== 설정 ===== */
+/* ===== 설정(코드에만 존재) ===== */
 const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션
 
-const LS_KEY_BG = "yjcare_monitor_last_bg";
-const LS_KEY_ARROW = "yjcare_monitor_last_arrow";
-
 /* ===== 유틸 ===== */
+let manualBg = null;
+function setManualBg(n){ manualBg = Number.isFinite(n) ? n : null; }
+
+const $ = (id) => document.getElementById(id);
+function pad2(n){ return String(n).padStart(2, "0"); }
+function toLocalInputValue(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function parseLocalInputToDate(v){
+  if (!v) return new Date();
+  const [dp, tp] = v.split("T");
+  const [y,m,d] = dp.split("-").map(Number);
+  const [hh,mm] = tp.split(":").map(Number);
+  return new Date(y, m-1, d, hh, mm, 0, 0);
+}
+function formatKST(d){ return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function safeNum(x, fallback=null){ const n = Number(x); return Number.isFinite(n) ? n : fallback; }
 function withToken(url){
   if (!NS_TOKEN) return url;
   const hasQ = url.includes("?");
@@ -207,56 +396,24 @@ async function fetchJson(url){
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
-function safeNum(x, fallback=null){
-  const n = Number(x);
-  return Number.isFinite(n) ? n : fallback;
-}
-function clamp01(x){ return Math.max(0, Math.min(1, x)); }
-function getSgv(e){
-  return safeNum(e?.sgv, null) ?? safeNum(e?.mbg, null);
-}
-function sortByTimeDesc(arr){
-  return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
-}
-function pad2(n){ return String(n).padStart(2, "0"); }
 
-function formatAge(ms){
-  if (!Number.isFinite(ms) || ms < 0) return "--:--";
-  const s = Math.floor(ms / 1000);
-  const hh = Math.floor(s / 3600);
-  const mm = Math.floor((s % 3600) / 60);
-  const ss = s % 60;
-  if (hh > 0) return `${hh}:${pad2(mm)}:${pad2(ss)}`;
-  return `${mm}:${pad2(ss)}`;
+/* ===== 현재 혈당 기반 “페이지 전체 톤” ===== */
+function colorForBg(bg){
+  if (!Number.isFinite(bg)) return { tint:"rgba(255,255,255,0.08)", strong:"rgba(255,255,255,0.12)" };
+  if (bg >= 40 && bg <= 70)   return { tint:"rgba(255,92,92,0.18)",  strong:"rgba(255,92,92,0.34)" };
+  if (bg >= 71 && bg <= 90)   return { tint:"rgba(255,170,64,0.16)", strong:"rgba(255,170,64,0.32)" };
+  if (bg >= 91 && bg <= 200)  return { tint:"rgba(110,231,183,0.14)",strong:"rgba(110,231,183,0.28)" };
+  if (bg >= 201 && bg <= 240) return { tint:"rgba(255,170,64,0.16)", strong:"rgba(255,170,64,0.32)" };
+  if (bg >= 241)              return { tint:"rgba(255,92,92,0.18)",  strong:"rgba(255,92,92,0.34)" };
+  return { tint:"rgba(255,255,255,0.08)", strong:"rgba(255,255,255,0.12)" };
+}
+function applyPageTint(bg){
+  const c = colorForBg(bg);
+  document.documentElement.style.setProperty("--pageTint", c.tint);
+  document.documentElement.style.setProperty("--pageTintStrong", c.strong);
 }
 
-/* ===== direction -> 화살표 ===== */
-function directionToArrow(dirRaw){
-  const dir = (dirRaw || "").toString().trim();
-  const key = dir.toLowerCase();
-
-  if (!dir || key === "none" || key === "flat" || key === "notcomputable" || key === "rateoutofrange"){
-    return { arrow: "—", cls: "flat" };
-  }
-
-  const map = {
-    "doubleup": { arrow: "↑↑", cls: "up" },
-    "singleup": { arrow: "↑", cls: "up" },
-    "fortyfiveup": { arrow: "↗", cls: "up" },
-    "doubledown": { arrow: "↓↓", cls: "down" },
-    "singledown": { arrow: "↓", cls: "down" },
-    "fortyfivedown": { arrow: "↘", cls: "down" }
-  };
-
-  if (map[key]) return map[key];
-
-  const compact = key.replace(/\s+/g, "");
-  if (map[compact]) return map[compact];
-
-  return { arrow: "—", cls: "flat" };
-}
-
-/* ===== 프로파일(필요 최소: dia, carbs_hr) ===== */
+/* ===== 프로파일 파싱 ===== */
 function pickProfileRecord(profileArr){
   if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
   return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
@@ -271,397 +428,482 @@ function getActiveStore(profileRecord){
   const keys = Object.keys(store).filter(k => typeof store[k] === "object");
   return keys.length ? store[keys[0]] : null;
 }
-function getDiaAndCarbsHr(profileJson){
+function timeToSeconds(t){
+  if (typeof t !== "string") return null;
+  const m = t.match(/^(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Number(m[1])*3600 + Number(m[2])*60;
+}
+function pickScheduleValue(scheduleArr, atDate){
+  if (!Array.isArray(scheduleArr) || scheduleArr.length === 0) return null;
+  const sec = atDate.getHours()*3600 + atDate.getMinutes()*60 + atDate.getSeconds();
+  const norm = scheduleArr
+    .map(x => {
+      const ts = safeNum(x.timeAsSeconds, null);
+      const tsec = (ts !== null) ? ts : timeToSeconds(x.time);
+      return { tsec: (tsec ?? 0), value: safeNum(x.value, null) };
+    })
+    .filter(x => x.value !== null)
+    .sort((a,b) => a.tsec - b.tsec);
+  if (!norm.length) return null;
+  let chosen = norm[0].value;
+  for (const it of norm){ if (it.tsec <= sec) chosen = it.value; else break; }
+  return chosen;
+}
+function getProfileAt(profileJson, atDate){
   const rec = pickProfileRecord(profileJson);
   const store = getActiveStore(rec);
-  if (!store) return { dia: null, carbsHr: null };
+  if (!store) return null;
+
+  const ic = pickScheduleValue(store.carbratio, atDate);
+  const isf = pickScheduleValue(store.sens, atDate);
+
   const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
+
+  // Nightscout/OpenAPS 계열은 peak(분) + curve(rapid/ultra)로 IOB가 달라질 수 있음
+  const curve = (store.curve || store.insulinCurve || "rapid-acting").toString();
+  const peak = safeNum(store.insulinPeakTime, null) ?? safeNum(store.peak, null); // minutes
+
   const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
-  return { dia, carbsHr };
+
+  return { ic, isf, dia, carbsHr, curve, peak };
 }
 
-/* ===== IOB smootherstep ===== */
-function insulinRemainingFractionSmootherstep(dtMs, diaHours){
-  const diaMs = diaHours * 3600 * 1000;
-  if (diaMs <= 0) return 0;
-  const u = clamp01(dtMs / diaMs);
-  const u2 = u*u;
-  const u3 = u2*u;
-  const f = u3 * (10 - 15*u + 6*u2);
-  return 1 - f;
+/* ===== Nightscout 계열 bilinear IOB =====
+   - duration: DIA hours
+   - peak: minutes (rapid-acting 대략 75, ultra-rapid 대략 55 같은 식)
+   - activity는 0→peak까지 선형 증가, peak→duration까지 선형 감소
+   - IOB는 activity 적분의 잔여 면적(= 1 - AUC[0..t]/AUC[0..D])로 계산
+*/
+function defaultPeakMinutes(curve){
+  const k = (curve||"").toLowerCase();
+  if (k.includes("ultra")) return 55;
+  return 75; // rapid-acting default
 }
-function computeIOB(treatments, atMs, diaHours){
+function iobFractionBilinear(dtMin, diaHours, peakMin){
+  const D = Math.max(1e-6, diaHours * 60);
+  const P = Math.min(Math.max(1, peakMin), D-1e-6);
+  const t = Math.min(Math.max(0, dtMin), D);
+
+  // total area under triangle: 0.5*D*1
+  // but with bilinear peak at 1, still triangle base D height 1 -> 0.5D
+  const totalAUC = 0.5 * D;
+
+  // activity a(t):
+  // 0..P: a = t/P
+  // P..D: a = (D - t)/(D - P)
+  // integrate a from 0..t:
+  let auc = 0;
+
+  if (t <= P){
+    // ∫(x/P) dx = t^2/(2P)
+    auc = (t*t) / (2*P);
+  } else {
+    // auc up to P is P/2
+    const aucToP = P/2;
+
+    // ∫ from P..t of (D - x)/(D - P) dx
+    // = [ (D x - x^2/2)/(D-P) ]_P^t
+    const denom = (D - P);
+    const F = (x) => (D*x - (x*x)/2) / denom;
+    const aucAfter = F(t) - F(P);
+    auc = aucToP + aucAfter;
+  }
+
+  const used = auc / totalAUC;         // 0..1
+  const remain = Math.max(0, 1 - used);
+  return remain;
+}
+function computeIOB_NSLike(treatments, atDate, diaHours, peakMin){
+  const at = atDate.getTime();
   let iob = 0;
+
   for (const tr of treatments){
     const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
     if (!Number.isFinite(tMs)) continue;
+
+    // Nightscout treatments에서 insulin 필드는 볼루스만 의미하는 경우가 대부분
     const insulin = safeNum(tr.insulin, null);
     if (insulin === null || insulin <= 0) continue;
-    const dt = atMs - tMs;
-    if (dt < 0) continue;
-    const frac = insulinRemainingFractionSmootherstep(dt, diaHours);
+
+    const dtMin = (at - tMs) / 60000;
+    if (dtMin < 0) continue;
+
+    const frac = iobFractionBilinear(dtMin, diaHours, peakMin);
     if (frac <= 0) continue;
+
     iob += insulin * frac;
   }
   return iob;
 }
 
-/* ===== COB 선형 decay ===== */
-function computeCOB(treatments, atMs, carbsHr){
+/* ===== COB (carbs_hr) =====
+   - 요청대로 carbs activity (g/hour) 기반 선형 decay 유지
+   - Nightscout와 COB가 다르면, carbs 이벤트 필터링(예: enteredBy, eventType) 차이일 가능성이 큽니다.
+*/
+function computeCOB(treatments, atDate, carbsHr){
+  const at = atDate.getTime();
   let cob = 0;
+
   for (const tr of treatments){
     const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
     if (!Number.isFinite(tMs)) continue;
+
     const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
     if (carbs === null || carbs <= 0) continue;
-    const dtH = (atMs - tMs) / (3600 * 1000);
+
+    const dtH = (at - tMs) / (3600 * 1000);
     if (dtH < 0) continue;
+
     const remain = carbs - carbsHr * dtH;
     if (remain > 0) cob += remain;
   }
   return cob;
 }
 
-/* ===== 배경 그래프 ===== */
-function zoneColor(bg){
-  if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
-  if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
-  if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
-  if (bg >= 201 && bg <= 240) return "rgba(255,170,64,0.32)";
-  if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
-  return "rgba(255,92,92,0.28)";
+/* ===== 혈당 선택 ===== */
+function pickNearestEntry(entries, atDate){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const at = atDate.getTime();
+  let best = null;
+  let bestAbs = Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    const abs = Math.abs(t - at);
+    if (abs < bestAbs){ bestAbs = abs; best = e; }
+  }
+  return best;
+}
+function pickLatestEntry(entries){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  let best = null, bestT = -Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    if (t > bestT){ bestT = t; best = e; }
+  }
+  return best;
 }
 
-function drawAreaBackground(canvas, series){
+/* ===== 차트(부드러운 곡선 + 단일 컬러 area) ===== */
+function drawSmoothAreaChart(canvas, points, fillColor){
   const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
 
-  const rect = canvas.getBoundingClientRect();
-  const cssW = rect.width;
-  const cssH = rect.height;
+  // 배경 틴트(카드 내부 캔버스도 현재 혈당 톤을 받게)
+  ctx.fillStyle = "rgba(255,255,255,0.00)";
+  ctx.fillRect(0,0,w,h);
 
-  if (!cssW || !cssH || cssW < 2 || cssH < 2) return false;
+  const padX = 22, padY = 18;
+  const iw = w - padX*2, ih = h - padY*2;
 
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  canvas.width  = Math.floor(cssW * dpr);
-  canvas.height = Math.floor(cssH * dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  ctx.clearRect(0,0,cssW,cssH);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0,0,cssW,cssH);
-
-  if (!series || series.length < 2){
-    const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
-    grad0.addColorStop(0, "rgba(0,0,0,0.76)");
-    grad0.addColorStop(1, "rgba(0,0,0,0.12)");
-    ctx.fillStyle = grad0;
-    ctx.fillRect(0,0,cssW,cssH);
-    return true;
+  // 가이드 라인
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  for (let i=1;i<=3;i++){
+    const y = padY + (ih/4)*i;
+    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX+iw, y); ctx.stroke();
   }
 
-  const padX = 10;
-  const padY = 10;
-  const w = cssW - padX*2;
-  const h = cssH - padY*2;
+  if (!points || points.length < 2) return;
 
-  const xs = series.map(p=>p.t);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
+  const xs = points.map(p=>p.t);
+  const ys = points.map(p=>p.v);
 
-  const minY = 40;
-  const maxY = 401;
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  let minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (minY === maxY){ minY -= 10; maxY += 10; }
+  const yPad = Math.max(12, (maxY - minY) * 0.12);
+  minY -= yPad; maxY += yPad;
 
-  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w;
-  const yMap = (v) => padY + (1 - ((v - minY) / (maxY - minY))) * h;
+  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * iw;
+  const yMap = (v) => padY + (1 - (v - minY) / (maxY - minY)) * ih;
 
-  for (let i=0;i<series.length-1;i++){
-    const p0 = series[i];
-    const p1 = series[i+1];
+  // Catmull-Rom -> Bezier control points
+  const pts = points.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
 
-    const x0 = xMap(p0.t);
-    const x1 = xMap(p1.t);
-    const y0 = yMap(p0.v);
-    const y1 = yMap(p1.v);
-
-    const mid = (p0.v + p1.v) / 2;
-    ctx.fillStyle = zoneColor(mid);
-
-    ctx.beginPath();
-    ctx.moveTo(x0, h + padY);
-    ctx.lineTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.lineTo(x1, h + padY);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  const grad = ctx.createLinearGradient(0, 0, 0, cssH);
-  grad.addColorStop(0, "rgba(0,0,0,0.76)");
-  grad.addColorStop(0.35, "rgba(0,0,0,0.40)");
-  grad.addColorStop(1, "rgba(0,0,0,0.12)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,cssW,cssH);
-
-  return true;
-}
-
-/* ===== 롤 애니메이션(핵심 수정: base는 항상 보임) ===== */
-function rollSwapSafe(containerEl, baseTextEl, nextText, direction){
-  const prevText = baseTextEl.textContent;
-  if (nextText === prevText) return;
-
-  baseTextEl.textContent = nextText;
-  baseTextEl.style.opacity = "1";
-  baseTextEl.style.transform = "translateY(0)";
-
-  const oldGhost = document.createElement("span");
-  oldGhost.className = "ghost";
-  const oldText = document.createElement("span");
-  oldText.className = "ghostText";
-  oldText.textContent = prevText;
-  oldGhost.appendChild(oldText);
-  containerEl.appendChild(oldGhost);
-
-  const newGhost = document.createElement("span");
-  newGhost.className = "ghost";
-  const newText = document.createElement("span");
-  newText.className = "ghostText";
-  newText.textContent = nextText;
-  newGhost.appendChild(newText);
-  containerEl.appendChild(newGhost);
-
-  const h = Math.max(24, Math.round(containerEl.getBoundingClientRect().height * 1.15));
-  const inFrom = (direction === "down") ? -h : h;
-  const outTo  = (direction === "down") ? h : -h;
-
-  try{
-    oldGhost.animate(
-      [
-        { transform: "translateY(0)", opacity: 1 },
-        { transform: `translateY(${outTo}px)`, opacity: 0 }
-      ],
-      { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
-    );
-
-    const animNew = newGhost.animate(
-      [
-        { transform: `translateY(${inFrom}px)`, opacity: 0 },
-        { transform: "translateY(0)", opacity: 1 }
-      ],
-      { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
-    );
-
-    const cleanup = () => {
-      if (oldGhost && oldGhost.isConnected) oldGhost.remove();
-      if (newGhost && newGhost.isConnected) newGhost.remove();
+  const tension = 0.5; // 0..1 (낮을수록 완만)
+  const cp = (p0, p1, p2, p3) => {
+    const d1 = { x: (p2.x - p0.x) * tension, y: (p2.y - p0.y) * tension };
+    const d2 = { x: (p3.x - p1.x) * tension, y: (p3.y - p1.y) * tension };
+    return {
+      c1: { x: p1.x + d1.x / 6, y: p1.y + d1.y / 6 },
+      c2: { x: p2.x - d2.x / 6, y: p2.y - d2.y / 6 }
     };
+  };
 
-    animNew.onfinish = cleanup;
-    animNew.oncancel = cleanup;
-  }catch(_){
-    if (oldGhost && oldGhost.isConnected) oldGhost.remove();
-    if (newGhost && newGhost.isConnected) newGhost.remove();
+  // area path
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+
+  for (let i=0;i<pts.length-1;i++){
+    const p0 = pts[Math.max(0, i-1)];
+    const p1 = pts[i];
+    const p2 = pts[i+1];
+    const p3 = pts[Math.min(pts.length-1, i+2)];
+
+    const { c1, c2 } = cp(p0,p1,p2,p3);
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
   }
+
+  // 아래로 닫아서 채움
+  ctx.lineTo(pts[pts.length-1].x, padY + ih);
+  ctx.lineTo(pts[0].x, padY + ih);
+  ctx.closePath();
+
+  ctx.fillStyle = fillColor;
+  ctx.globalAlpha = 0.85;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // 상단 라인(화이트)
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=0;i<pts.length-1;i++){
+    const p0 = pts[Math.max(0, i-1)];
+    const p1 = pts[i];
+    const p2 = pts[i+1];
+    const p3 = pts[Math.min(pts.length-1, i+2)];
+    const { c1, c2 } = cp(p0,p1,p2,p3);
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+  }
+  ctx.lineWidth = 3.5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255,255,255,0.90)";
+  ctx.stroke();
+
+  // 마지막 점
+  const last = pts[pts.length-1];
+  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.beginPath(); ctx.arc(last.x, last.y, 6, 0, Math.PI*2); ctx.fill();
 }
 
-/* ===== 데이터 로드/렌더 ===== */
-let cachedProfile = null;
-let cachedEntries = null;
-let cachedTreatments = null;
-
-let latestEntryMsForAge = null;
-let lastBgNum = null;
-
-let lastSeries = null;
-let chartRetryRaf = 0;
+/* ===== 상태/갱신 ===== */
+let cachedProfile = null, cachedEntries = null, cachedTreatments = null;
 
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
-  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
-  const trUrl = withToken(`${base}/api/v1/treatments.json?count=200`);
+  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=48`);
+  const trUrl = withToken(`${base}/api/v1/treatments.json?count=300`);
   const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
-  cachedProfile = p;
-  cachedEntries = e;
-  cachedTreatments = t;
+  cachedProfile = p; cachedEntries = e; cachedTreatments = t;
 }
 
-function drawChartNow(){
-  const canvas = document.getElementById("bgCanvas");
-  if (!canvas) return;
+function updateUI(){
+  if (!cachedProfile || !cachedEntries || !cachedTreatments) return;
 
-  if (!lastSeries) return;
+  const atDate = parseLocalInputToDate($("atTime").value);
+  $("timeLabel").textContent = formatKST(atDate);
 
-  const ok = drawAreaBackground(canvas, lastSeries);
-  if (!ok){
-    if (chartRetryRaf) cancelAnimationFrame(chartRetryRaf);
-    chartRetryRaf = requestAnimationFrame(() => {
-      drawAreaBackground(canvas, lastSeries);
-    });
-  }
-}
+  const prof = getProfileAt(cachedProfile, atDate);
+  if (!prof) return;
 
-function render(){
-  const bgRoll = document.getElementById("bgRoll");
-  const bgText = document.getElementById("bgText");
-  const arrowRoll = document.getElementById("arrowRoll");
-  const arrowText = document.getElementById("arrowText");
-  const arrowWrap = document.getElementById("arrowWrap");
+  const latest = pickLatestEntry(cachedEntries);
+  const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
 
-  const ageEl = document.getElementById("ageTxt");
-  const chgEl = document.getElementById("chgTxt");
-  const iobEl = document.getElementById("iobTxt");
-  const cobEl = document.getElementById("cobTxt");
+  const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
+  const effectiveBg = (manualBg !== null) ? manualBg : nowSgv;
 
-  if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0){
-    const cached = localStorage.getItem(LS_KEY_BG);
-    if (cached) bgText.textContent = cached;
-    return;
-  }
+  // 페이지 전체 톤 갱신(좌우/하단 여백, 블랙 방지)
+  applyPageTint(effectiveBg);
 
-  const s = sortByTimeDesc(cachedEntries);
-  const latest = s[0];
-  const prev = s[1];
+  // 최상단 표시(수동 우선)
+  const bgEl = $("bgBig");
+  bgEl.textContent = (effectiveBg !== null) ? String(Math.round(effectiveBg)) : "--";
 
-  const latestV = getSgv(latest);
-  const latestMs = safeNum(latest?.date, null);
-
-  const prevV = getSgv(prev);
-  const delta = (latestV !== null && prevV !== null) ? (latestV - prevV) : null;
-
-  const nextBgText = (latestV !== null) ? String(Math.round(latestV)) : "--";
-
-  let dir = "up";
-  if (lastBgNum !== null && Number.isFinite(latestV)){
-    dir = latestV > lastBgNum ? "up" : (latestV < lastBgNum ? "down" : "up");
-  } else if (delta !== null){
-    dir = delta >= 0 ? "up" : "down";
-  }
-
-  if (bgText.textContent === "--" && nextBgText !== "--"){
-    bgText.textContent = nextBgText;
+  const editBtn = $("editBgBtn");
+  if (manualBg !== null){
+    bgEl.classList.add("manual");
+    editBtn.textContent = "↻";
+    editBtn.setAttribute("aria-label", "되돌리기");
+    editBtn.dataset.mode = "revert";
   } else {
-    rollSwapSafe(bgRoll, bgText, nextBgText, dir);
+    bgEl.classList.remove("manual");
+    editBtn.textContent = "✎";
+    editBtn.setAttribute("aria-label", "혈당 수정");
+    editBtn.dataset.mode = "edit";
   }
 
-  if (Number.isFinite(latestV)) lastBgNum = latestV;
-
-  const { arrow, cls } = directionToArrow(latest?.direction);
-  if (arrowWrap) arrowWrap.className = "arrow " + cls;
-
-  if (!arrowText.textContent || arrowText.textContent === "—"){
-    arrowText.textContent = arrow;
+  // 델타(표시는 흰색 고정)
+  let delta = null;
+  if (Array.isArray(cachedEntries) && cachedEntries.length >= 2){
+    const sorted = [...cachedEntries].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
+    const a = safeNum(sorted[0]?.sgv, null) ?? safeNum(sorted[0]?.mbg, null);
+    const b = safeNum(sorted[1]?.sgv, null) ?? safeNum(sorted[1]?.mbg, null);
+    if (a !== null && b !== null) delta = a - b;
+  }
+  const pill = $("deltaPill");
+  if (delta === null){
+    pill.textContent = "--";
+    pill.className = "delta";
   } else {
-    rollSwapSafe(arrowRoll, arrowText, arrow, dir);
-  }
-
-  if (latestMs !== null){
-    latestEntryMsForAge = latestMs;
-    ageEl.textContent = formatAge(Date.now() - latestMs);
-  } else {
-    ageEl.textContent = "--:--";
-  }
-
-  if (delta !== null){
     const sign = delta > 0 ? "+" : "";
-    chgEl.textContent = sign + String(Math.round(delta));
-  } else {
-    chgEl.textContent = "--";
+    pill.textContent = `${sign}${Math.round(delta)}`;
+    pill.className = "delta"; // up/down 클래스 의미 제거
   }
 
-  const { dia, carbsHr } = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
-
-  const iob = (Number.isFinite(dia) && dia > 0 && cachedTreatments && latestMs !== null)
-    ? computeIOB(cachedTreatments, latestMs, dia)
-    : null;
-
-  const cob = (Number.isFinite(carbsHr) && carbsHr > 0 && cachedTreatments && latestMs !== null)
-    ? computeCOB(cachedTreatments, latestMs, carbsHr)
-    : null;
-
-  iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
-  cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
-
-  localStorage.setItem(LS_KEY_BG, nextBgText);
-  localStorage.setItem(LS_KEY_ARROW, arrow);
-
-  const endT = (latestMs !== null) ? latestMs : Date.now();
+  // 차트: 기준시간 기준 최근 1시간
+  const endT = Math.min(atDate.getTime(), safeNum(latest?.date, atDate.getTime()) ?? atDate.getTime());
   const startT = endT - 60*60*1000;
 
-  lastSeries = cachedEntries
+  const series = (Array.isArray(cachedEntries) ? cachedEntries : [])
     .filter(e => {
       const t = safeNum(e.date, null);
-      const v = getSgv(e);
-      return Number.isFinite(t) && v !== null && t >= startT && t <= endT;
+      return Number.isFinite(t) && t >= startT && t <= endT;
     })
     .sort((a,b)=>safeNum(a.date,0)-safeNum(b.date,0))
-    .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }))
-    .filter(p => p.v !== null);
+    .map(e => {
+      const t = safeNum(e.date, 0);
+      const v = safeNum(e.sgv, null) ?? safeNum(e.mbg, null);
+      return (v === null) ? null : { t, v };
+    })
+    .filter(Boolean);
 
-  try{
-    drawChartNow();
-  }catch(e){
-    console.warn("chart draw failed", e);
-    requestAnimationFrame(drawChartNow);
-  }
+  // 현재 혈당 기준 컬러 하나로 area fill
+  const fill = colorForBg(effectiveBg).strong;
+  drawSmoothAreaChart($("chart"), series, fill);
+
+  // IOB/COB
+  const dia = prof.dia;
+  const peakMin = Number.isFinite(prof.peak) ? prof.peak : defaultPeakMinutes(prof.curve);
+
+  const iob = (Number.isFinite(dia) && dia > 0)
+    ? computeIOB_NSLike(cachedTreatments, atDate, dia, peakMin)
+    : null;
+
+  const cob = (Number.isFinite(prof.carbsHr) && prof.carbsHr > 0)
+    ? computeCOB(cachedTreatments, atDate, prof.carbsHr)
+    : null;
+
+  $("iobTxt").textContent = (iob !== null) ? iob.toFixed(2) : "--";
+  $("cobTxt").textContent = (cob !== null) ? cob.toFixed(1) : "--";
+
+  // 권장 인슐린
+  const carbsIn = safeNum($("carbsIn").value, 0) ?? 0;
+  const target = safeNum($("targetIn").value, 180) ?? 180;
+
+  const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
+  const corrRaw = (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
+    ? ((effectiveBg - target) / prof.isf)
+    : null;
+  const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
+
+  const iobSub = (iob !== null) ? iob : 0;
+
+  let total = 0;
+  if (mealIns !== null) total += mealIns;
+  if (corrIns !== null) total += corrIns;
+  total -= iobSub;
+  total = Math.max(0, total);
+
+  $("finalIns").textContent = total.toFixed(2);
+  $("mealIns").textContent = (mealIns !== null) ? mealIns.toFixed(2) : "--";
+  $("corrIns").textContent = (corrIns !== null) ? corrIns.toFixed(2) : "--";
+  $("iobSub").textContent = (iob !== null) ? iob.toFixed(2) : "--";
 }
 
 let updating = false;
-async function refresh(){
+async function refreshAll(){
   if (updating) return;
   updating = true;
   try{
     await loadData();
-    render();
+    updateUI();
   }catch(e){
-    console.warn("monitor refresh failed", e);
-    const bgText = document.getElementById("bgText");
-    const arrowText = document.getElementById("arrowText");
-    const cachedBg = localStorage.getItem(LS_KEY_BG);
-    const cachedArrow = localStorage.getItem(LS_KEY_ARROW);
-    if (cachedBg) bgText.textContent = cachedBg;
-    if (cachedArrow) arrowText.textContent = cachedArrow;
+    console.warn("refresh failed", e);
   }finally{
     updating = false;
   }
 }
 
+function bumpMinutes(mins){
+  const d = parseLocalInputToDate($("atTime").value);
+  d.setMinutes(d.getMinutes() + mins);
+  $("atTime").value = toLocalInputValue(d);
+  updateUI();
+}
+
+/* ===== 초기화 ===== */
 (function init(){
-  refresh();
+  const now = new Date();
+  $("atTime").value = toLocalInputValue(now);
+  $("timeLabel").textContent = formatKST(now);
 
-  setInterval(refresh, 30 * 1000);
-
-  setInterval(() => {
-    const ageEl = document.getElementById("ageTxt");
-    if (!ageEl) return;
-    if (Number.isFinite(latestEntryMsForAge)) {
-      ageEl.textContent = formatAge(Date.now() - latestEntryMsForAge);
-    } else {
-      ageEl.textContent = "--:--";
-    }
-  }, 1000);
-
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden){
-      refresh();
-      requestAnimationFrame(drawChartNow);
-    }
+  $("timeDisplay").addEventListener("click", () => {
+    const input = $("atTime");
+    if (input.showPicker) input.showPicker();
+    else input.click();
   });
 
-  if (window.visualViewport){
-    window.visualViewport.addEventListener("resize", () => {
-      try{ render(); }catch(_){}
-      requestAnimationFrame(drawChartNow);
+  document.querySelectorAll(".btn[data-add]").forEach(btn=>{
+    btn.addEventListener("click", () => bumpMinutes(Number(btn.dataset.add)));
+  });
+
+  document.querySelectorAll(".btn[data-reset]").forEach(btn=>{
+    btn.addEventListener("click", () => {
+      const now2 = new Date();
+      $("atTime").value = toLocalInputValue(now2);
+      updateUI();
     });
-    window.visualViewport.addEventListener("scroll", () => {
-      requestAnimationFrame(drawChartNow);
+  });
+
+  function beginBgEdit(){
+    const el = $("bgBig");
+    const current = manualBg !== null ? manualBg : Number(el.textContent);
+    if (el.querySelector("input")) return;
+
+    const input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.className = "bgEditInput";
+    input.value = Number.isFinite(current) ? String(Math.round(current)) : "";
+    input.placeholder = "--";
+
+    el.textContent = "";
+    el.appendChild(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const n = Number(input.value);
+      if (input.value.trim() === "") setManualBg(null);
+      else if (Number.isFinite(n) && n > 0) setManualBg(n);
+      updateUI();
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+      if (e.key === "Escape") { setManualBg(manualBg); updateUI(); }
     });
+
+    input.addEventListener("blur", commit);
   }
 
-  window.addEventListener("resize", () => {
-    try{ render(); }catch(_){}
-    requestAnimationFrame(drawChartNow);
-  });
+  const editBtn = $("editBgBtn");
+  const onEditBtn = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (manualBg !== null) {
+      setManualBg(null);
+      updateUI();
+      return;
+    }
+    beginBgEdit();
+  };
+  editBtn.addEventListener("pointerdown", onEditBtn);
+  $("bgBig").addEventListener("click", beginBgEdit);
+
+  $("atTime").addEventListener("change", updateUI);
+  $("carbsIn").addEventListener("input", updateUI);
+  $("targetIn").addEventListener("input", updateUI);
+
+  refreshAll();
+  setInterval(refreshAll, 60 * 1000);
 })();
 </script>
 </body>
