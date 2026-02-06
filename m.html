@@ -150,7 +150,9 @@
   </div>
 
 <script>
-/* ===== Nightscout 연결 ===== */
+/* =========================
+   Nightscout 연결
+========================= */
 const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션
 
@@ -165,7 +167,9 @@ async function fetchJson(url){
   return res.json();
 }
 
-/* ===== 유틸 ===== */
+/* =========================
+   유틸
+========================= */
 function safeNum(x, fallback=null){
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
@@ -210,7 +214,9 @@ function animateText(el, nextText, dir){
 }
 function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
 
-/* ===== 프로파일에서 dia / carbs_hr 읽기 ===== */
+/* =========================
+   프로파일에서 dia / carbs_hr 읽기
+========================= */
 function pickProfileRecord(profileArr){
   if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
   return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
@@ -234,23 +240,24 @@ function getDiaAndCarbsHr(profileJson){
   return { dia, carbsHr };
 }
 
-/* ===== 합의한 IOB/COB 계산식 =====
-   IOB: bilinear activity 기반, peak 94분
-   COB: carbs_hr 선형 감소 + carbDelay 23분
-*/
+/* =========================
+   합의한 IOB/COB 계산식
+   IOB: bilinear activity, peak 94분
+   COB: carbs_hr 선형 감소 + 23분 지연
+========================= */
 const IOB_PEAK_MIN = 94;
 const COB_DELAY_MIN = 23;
 
 function insulinRemainingFractionBilinear(dtMs, diaHours, peakMinutes){
-  const td = diaHours * 60;                // minutes
+  const td = diaHours * 60;
   if (!Number.isFinite(td) || td <= 0) return 0;
 
-  const t = dtMs / (60 * 1000);           // minutes
+  const t = dtMs / (60 * 1000);
   if (t <= 0) return 1;
   if (t >= td) return 0;
 
   const tp = Math.min(Math.max(peakMinutes, 1), td - 1);
-  const h = 2 / td;                       // triangle height s.t. total area = 1
+  const h = 2 / td; // total area=1
 
   let used;
   if (t <= tp){
@@ -295,12 +302,10 @@ function computeCOB(treatments, atMs, carbsHr){
     if (!Number.isFinite(carbs) || carbs <= 0) continue;
 
     const dtMs = atMs - tMs - delayMs;
-
     if (dtMs <= 0){
-      cob += carbs; // 지연 전: 전량 유지
+      cob += carbs;
       continue;
     }
-
     const dtH = dtMs / (3600 * 1000);
     const remain = carbs - carbsHr * dtH;
     if (remain > 0) cob += remain;
@@ -308,7 +313,9 @@ function computeCOB(treatments, atMs, carbsHr){
   return cob;
 }
 
-/* ===== 컬러/배경 ===== */
+/* =========================
+   컬러/배경 + 컬러 보간
+========================= */
 function colorForBg(bg){
   if (!Number.isFinite(bg)) return "rgba(255,255,255,0.10)";
   if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
@@ -339,7 +346,39 @@ function applyStageColor(rgba){
   document.body.style.background = rgba;
 }
 
-/* ===== 그래프(1시간 창) ===== */
+let colorAnim = {
+  active:false,
+  from:"rgba(255,255,255,0.10)",
+  to:"rgba(255,255,255,0.10)",
+  start:0,
+  dur:650
+};
+function startColorTransition(next){
+  if (!colorAnim.to){
+    colorAnim.from = next;
+    colorAnim.to = next;
+    colorAnim.active = false;
+    return;
+  }
+  if (next === colorAnim.to) return;
+  colorAnim.active = true;
+  colorAnim.from = colorAnim.to;
+  colorAnim.to = next;
+  colorAnim.start = performance.now();
+}
+function currentFillColor(){
+  if (!colorAnim.active) return colorAnim.to;
+  const now = performance.now();
+  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
+  const k = easeOutCubic(t);
+  const c = lerpColor(colorAnim.from, colorAnim.to, k);
+  if (t >= 1) colorAnim.active = false;
+  return c;
+}
+
+/* =========================
+   그래프(1시간 창) 데이터
+========================= */
 function buildSeriesFor1h(entries, endMs){
   const startMs = endMs - 60*60*1000;
   return entries
@@ -352,7 +391,11 @@ function buildSeriesFor1h(entries, endMs){
     .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }));
 }
 
-/* 캔버스: 항상 화면 전체를 fillColor로 먼저 채운 뒤 그래프 */
+/* =========================
+   그래프 렌더(대비: 배경 1.0, 차트 area는 낮은 alpha)
+========================= */
+const CHART_AREA_ALPHA = 0.26; // 배경 대비용(0.20~0.35 추천)
+
 function drawSmoothArea(canvas, series, fillColor){
   const ctx = canvas.getContext("2d", { alpha: true });
 
@@ -368,9 +411,12 @@ function drawSmoothArea(canvas, series, fillColor){
 
   ctx.clearRect(0,0,cssW,cssH);
 
+  // 1) 배경은 fillColor로 꽉 채움
+  ctx.globalAlpha = 1;
   ctx.fillStyle = fillColor;
   ctx.fillRect(0,0,cssW,cssH);
 
+  // 데이터가 없으면 대비만 유지(상단 어둡게)
   if (!series || series.length < 2){
     const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
     grad0.addColorStop(0, "rgba(0,0,0,0.70)");
@@ -406,35 +452,61 @@ function drawSmoothArea(canvas, series, fillColor){
     };
   };
 
-// 배경은 fillColor로 꽉 채우지만,
-// 차트 area는 더 투명하게 깔아서 선이 묻히지 않게 한다.
-ctx.globalAlpha = 0.45;              // ← 여기 값만 0.35~0.55 사이에서 취향 조절
-ctx.beginPath();
-ctx.moveTo(pts[0].x, pts[0].y);
-for (let i=0;i<pts.length-1;i++){
-  const p0 = pts[Math.max(0, i-1)];
-  const p1 = pts[i];
-  const p2 = pts[i+1];
-  const p3 = pts[Math.min(pts.length-1, i+2)];
-  const { c1, c2 } = cp(p0,p1,p2,p3);
-  ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
-}
-ctx.lineTo(pts[pts.length-1].x, cssH);
-ctx.lineTo(pts[0].x, cssH);
-ctx.closePath();
-ctx.fillStyle = fillColor;
-ctx.fill();
-ctx.globalAlpha = 1;
+  // 2) 차트 area는 더 투명하게(배경과 대비)
+  ctx.globalAlpha = CHART_AREA_ALPHA;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=0;i<pts.length-1;i++){
+    const p0 = pts[Math.max(0, i-1)];
+    const p1 = pts[i];
+    const p2 = pts[i+1];
+    const p3 = pts[Math.min(pts.length-1, i+2)];
+    const { c1, c2 } = cp(p0,p1,p2,p3);
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+  }
+  ctx.lineTo(pts[pts.length-1].x, cssH);
+  ctx.lineTo(pts[0].x, cssH);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.globalAlpha = 1;
 
+  // 3) 상단 텍스트 대비용 그라데이션
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
-  grad.addColorStop(0, "rgba(0,0,0,0.70)");
-  grad.addColorStop(0.35, "rgba(0,0,0,0.38)");
-  grad.addColorStop(1, "rgba(0,0,0,0.12)");
+  grad.addColorStop(0, "rgba(0,0,0,0.65)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.35)");
+  grad.addColorStop(1, "rgba(0,0,0,0.10)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,cssW,cssH);
 }
 
-/* ===== 스테이지 리사이즈 ===== */
+/* =========================
+   오프스크린 버퍼(슬라이드 합성)
+========================= */
+let bufOld = document.createElement("canvas");
+let bufNew = document.createElement("canvas");
+
+function ensureBufferSize(buf, cssW, cssH){
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const w = Math.floor(cssW * dpr);
+  const h = Math.floor(cssH * dpr);
+  if (buf.width !== w || buf.height !== h){
+    buf.width = w;
+    buf.height = h;
+  }
+  buf._cssW = cssW;
+  buf._cssH = cssH;
+}
+
+function drawSmoothAreaTo(buf, series, fillColor){
+  buf._cssW = buf._cssW ?? window.innerWidth;
+  buf._cssH = buf._cssH ?? window.innerHeight;
+  drawSmoothArea(buf, series, fillColor);
+}
+
+/* =========================
+   스테이지 리사이즈
+========================= */
 function resizeStage(){
   const stage = document.getElementById("stage");
   const canvas = document.getElementById("bgCanvas");
@@ -449,7 +521,9 @@ function resizeStage(){
   canvas._cssH = h;
 }
 
-/* ===== 상태/애니메이션 ===== */
+/* =========================
+   상태
+========================= */
 let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
@@ -457,47 +531,19 @@ let cachedTreatments = null;
 let latestEntryMsForAge = null;
 let lastBgValue = null;
 
-let prevGraphEndMs = null;
+let lastRenderedEndMs = null;
 
-let timeAnim = {
+let slideAnim = {
   active:false,
-  fromEndMs:0,
-  toEndMs:0,
-  start:0,
-  dur:700
-};
-
-let colorAnim = {
-  active:false,
-  from:"rgba(255,255,255,0.10)",
-  to:"rgba(255,255,255,0.10)",
+  from:0,
+  to:0,
   start:0,
   dur:650
 };
 
-function startColorTransition(next){
-  if (!colorAnim.to){
-    colorAnim.from = next;
-    colorAnim.to = next;
-    colorAnim.active = false;
-    return;
-  }
-  if (next === colorAnim.to) return;
-  colorAnim.active = true;
-  colorAnim.from = colorAnim.to;
-  colorAnim.to = next;
-  colorAnim.start = performance.now();
-}
-function currentFillColor(){
-  if (!colorAnim.active) return colorAnim.to;
-  const now = performance.now();
-  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
-  const k = easeOutCubic(t);
-  const c = lerpColor(colorAnim.from, colorAnim.to, k);
-  if (t >= 1) colorAnim.active = false;
-  return c;
-}
-
+/* =========================
+   데이터 로드
+========================= */
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
@@ -509,37 +555,57 @@ async function loadData(){
   cachedTreatments = t;
 }
 
-function renderFrame(endMs){
+/* =========================
+   슬라이드 애니메이션 틱
+========================= */
+function tickAnim(){
   const canvas = document.getElementById("bgCanvas");
-  const series = buildSeriesFor1h(cachedEntries || [], endMs);
+  const ctx = canvas.getContext("2d", { alpha:true });
+
+  const cssW = canvas._cssW || window.innerWidth;
+  const cssH = canvas._cssH || window.innerHeight;
+
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const w = Math.floor(cssW * dpr);
+  const h = Math.floor(cssH * dpr);
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+
   const fill = currentFillColor();
   applyStageColor(fill);
-  drawSmoothArea(canvas, series, fill);
-}
 
-function tickAnim(){
-  if (!timeAnim.active && !colorAnim.active) return;
-
-  const now = performance.now();
-  let endMs = prevGraphEndMs ?? Date.now();
-
-  if (timeAnim.active){
-    const t = Math.min(1, (now - timeAnim.start) / timeAnim.dur);
+  let shift = slideAnim.to;
+  if (slideAnim.active){
+    const now = performance.now();
+    const t = Math.min(1, (now - slideAnim.start) / slideAnim.dur);
     const k = easeOutCubic(t);
-    endMs = Math.round(timeAnim.fromEndMs + (timeAnim.toEndMs - timeAnim.fromEndMs) * k);
+    shift = slideAnim.from + (slideAnim.to - slideAnim.from) * k;
+
     if (t >= 1){
-      timeAnim.active = false;
-      prevGraphEndMs = timeAnim.toEndMs;
+      slideAnim.active = false;
+      shift = slideAnim.to;
+      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
     }
   }
 
-  renderFrame(endMs);
+  // old: 왼쪽으로 밀림, new: 오른쪽에서 진입
+  ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
+  ctx.drawImage(bufNew, cssW - shift, 0, cssW, cssH);
 
-  if (timeAnim.active || colorAnim.active){
+  if (slideAnim.active || colorAnim.active){
     requestAnimationFrame(tickAnim);
   }
 }
 
+/* =========================
+   메인 렌더
+========================= */
 function renderNow(){
   const bgEl = document.getElementById("bgTxt");
   const arrowEl = document.getElementById("arrowTxt");
@@ -589,22 +655,65 @@ function renderNow(){
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  startColorTransition(colorForBg(latestV));
+  const nextFill = colorForBg(latestV);
+  startColorTransition(nextFill);
 
-  if (Number.isFinite(prevGraphEndMs) && latestMs > prevGraphEndMs){
-    timeAnim.active = true;
-    timeAnim.fromEndMs = prevGraphEndMs;
-    timeAnim.toEndMs = latestMs;
-    timeAnim.start = performance.now();
+  // 버퍼 크기 맞추기
+  const canvas = document.getElementById("bgCanvas");
+  const cssW = canvas._cssW || window.innerWidth;
+  const cssH = canvas._cssH || window.innerHeight;
+  ensureBufferSize(bufOld, cssW, cssH);
+  ensureBufferSize(bufNew, cssW, cssH);
+
+  // 최초 렌더: old/new 모두 동일로 채워둠
+  if (!Number.isFinite(lastRenderedEndMs)){
+    const series0 = buildSeriesFor1h(cachedEntries, latestMs);
+    drawSmoothAreaTo(bufOld, series0, nextFill);
+    drawSmoothAreaTo(bufNew, series0, nextFill);
+    lastRenderedEndMs = latestMs;
+
+    // 즉시 표시
+    const mainCtx = canvas.getContext("2d", { alpha:true });
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    mainCtx.setTransform(dpr,0,0,dpr,0,0);
+    mainCtx.clearRect(0,0,cssW,cssH);
+    applyStageColor(currentFillColor());
+    mainCtx.drawImage(bufOld, 0, 0, cssW, cssH);
+    return;
+  }
+
+  // 새 시각이면: new를 먼저 렌더하고 슬라이드
+  if (latestMs > lastRenderedEndMs){
+    const seriesNew = buildSeriesFor1h(cachedEntries, latestMs);
+    drawSmoothAreaTo(bufNew, seriesNew, nextFill);
+
+    const dt = latestMs - lastRenderedEndMs;
+    const windowMs = 60 * 60 * 1000;
+    const shiftPx = Math.max(12, Math.min(cssW, cssW * (dt / windowMs))); // 최소 이동량 12px로 새로고침 느낌 완화
+
+    slideAnim.active = true;
+    slideAnim.from = 0;
+    slideAnim.to = shiftPx;
+    slideAnim.start = performance.now();
+
+    lastRenderedEndMs = latestMs;
     requestAnimationFrame(tickAnim);
-  } else {
-    prevGraphEndMs = latestMs;
-    renderFrame(latestMs);
-    if (colorAnim.active) requestAnimationFrame(tickAnim);
+    return;
+  }
+
+  // 시각 동일: 컬러만 반영(슬라이드 없음)
+  if (colorAnim.active){
+    requestAnimationFrame(tickAnim);
   }
 }
 
-/* ===== 루프 ===== */
+/* =========================
+   루프
+========================= */
 let updating = false;
 async function refresh(){
   if (updating) return;
@@ -631,10 +740,23 @@ async function refresh(){
     ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
   }, 1000);
 
-  window.addEventListener("resize", () => { resizeStage(); try{ renderNow(); }catch(_){ } });
+  window.addEventListener("resize", () => {
+    resizeStage();
+    // 리사이즈 시 버퍼 재렌더(현재 화면 유지)
+    try{
+      lastRenderedEndMs = null;
+      renderNow();
+    }catch(_){}
+  });
 
   if (window.visualViewport){
-    window.visualViewport.addEventListener("resize", () => { resizeStage(); try{ renderNow(); }catch(_){ } });
+    window.visualViewport.addEventListener("resize", () => {
+      resizeStage();
+      try{
+        lastRenderedEndMs = null;
+        renderNow();
+      }catch(_){}
+    });
     window.visualViewport.addEventListener("scroll", () => { resizeStage(); });
   }
 })();
