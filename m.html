@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>YJCARE Monitor</title>
+  <style>
+    :root{
+      --bg:#000000;
+      --text:#f4f4f7;
+      --muted:rgba(244,244,247,0.65);
+      --hair:rgba(255,255,255,0.10);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; margin:0; background:var(--bg); overflow:hidden;}
+    body{
+      font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+
+    /* 배경 그래프 캔버스 */
+    #bgCanvas{
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+      display:block;
+    }
+
+    /* 중앙 오버레이 */
+    .overlay{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 12px;
+      pointer-events:none; /* 모니터용: 터치 무시 */
+    }
+    .panel{
+      width:100%;
+      max-width: 680px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap: 8px;
+      text-align:center;
+    }
+
+    .mainRow{
+      display:flex;
+      align-items:baseline;
+      justify-content:center;
+      gap: 14px;
+      width:100%;
+    }
+    .bg{
+      font-size: 96px;
+      line-height: 0.95;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      color: var(--text);
+    }
+    .delta{
+      font-size: 40px;
+      font-weight: 750;
+      letter-spacing: -0.6px;
+      color: var(--muted);
+      min-width: 110px;
+      text-align:left;
+      white-space:nowrap;
+    }
+    .delta.up{ color: rgba(255,92,92,0.95); }
+    .delta.down{ color: rgba(110,231,183,0.95); }
+
+    .subRow{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap: 16px;
+      flex-wrap:wrap;
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 650;
+      letter-spacing: 0.2px;
+    }
+    .subRow span b{
+      color: var(--text);
+      font-weight: 750;
+    }
+
+    /* 초소형 가로 모니터 대응: 폰트 자동 축소 */
+    @media (max-width: 520px){
+      .bg{ font-size: 76px; }
+      .delta{ font-size: 34px; min-width: 96px; }
+      .subRow{ font-size: 14px; }
+    }
+    @media (max-height: 220px){
+      .bg{ font-size: 72px; }
+      .delta{ font-size: 30px; }
+      .subRow{ font-size: 13px; }
+      .panel{ gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bgCanvas" width="1200" height="600"></canvas>
+
+  <div class="overlay">
+    <div class="panel">
+      <div class="mainRow">
+        <div id="bgTxt" class="bg">--</div>
+        <div id="deltaTxt" class="delta">--</div>
+      </div>
+
+      <div class="subRow">
+        <span>직전대비 <b id="stepTxt">--</b></span>
+        <span>IOB <b id="iobTxt">--</b>U</span>
+        <span>COB <b id="cobTxt">--</b>g</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===== 설정(코드에만 존재) ===== */
+const NS_BASE_URL = "https://ns.whalesound.net";
+const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
+
+/* ===== 유틸 ===== */
+function withToken(url){
+  if (!NS_TOKEN) return url;
+  const hasQ = url.includes("?");
+  return url + (hasQ ? "&" : "?") + "token=" + encodeURIComponent(NS_TOKEN);
+}
+async function fetchJson(url){
+  const res = await fetch(url, { method:"GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+function safeNum(x, fallback=null){
+  const n = Number(x);
+  return Number.isFinite(n) ? n : fallback;
+}
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+/* ===== 프로파일(필요 최소: dia, carbs_hr) ===== */
+function pickProfileRecord(profileArr){
+  if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
+  return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
+}
+function getActiveStore(profileRecord){
+  if (!profileRecord) return null;
+  const store = profileRecord.store || profileRecord;
+  if (!store) return null;
+  const defName = profileRecord.defaultProfile || store.defaultProfile || profileRecord.defaultprofile;
+  if (defName && store[defName]) return store[defName];
+  if (store.Default) return store.Default;
+  const keys = Object.keys(store).filter(k => typeof store[k] === "object");
+  return keys.length ? store[keys[0]] : null;
+}
+function getDiaAndCarbsHr(profileJson){
+  const rec = pickProfileRecord(profileJson);
+  const store = getActiveStore(rec);
+  if (!store) return { dia: null, carbsHr: null };
+  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
+  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
+  return { dia, carbsHr };
+}
+
+/* ===== IOB smootherstep ===== */
+function insulinRemainingFractionSmootherstep(dtMs, diaHours){
+  const diaMs = diaHours * 3600 * 1000;
+  if (diaMs <= 0) return 0;
+  const u = clamp01(dtMs / diaMs);
+  const u2 = u*u;
+  const u3 = u2*u;
+  const f = u3 * (10 - 15*u + 6*u2);
+  return 1 - f;
+}
+function computeIOB(treatments, atMs, diaHours){
+  let iob = 0;
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+    const insulin = safeNum(tr.insulin, null);
+    if (insulin === null || insulin <= 0) continue;
+    const dt = atMs - tMs;
+    if (dt < 0) continue;
+    const frac = insulinRemainingFractionSmootherstep(dt, diaHours);
+    if (frac <= 0) continue;
+    iob += insulin * frac;
+  }
+  return iob;
+}
+
+/* ===== COB 선형 decay ===== */
+function computeCOB(treatments, atMs, carbsHr){
+  let cob = 0;
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+    const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
+    if (carbs === null || carbs <= 0) continue;
+    const dtH = (atMs - tMs) / (3600 * 1000);
+    if (dtH < 0) continue;
+    const remain = carbs - carbsHr * dtH;
+    if (remain > 0) cob += remain;
+  }
+  return cob;
+}
+
+/* ===== 혈당/델타/직전대비 ===== */
+function sortByTimeDesc(arr){
+  return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
+}
+function getSgv(e){
+  return safeNum(e?.sgv, null) ?? safeNum(e?.mbg, null);
+}
+function computeDelta(entries){
+  if (!Array.isArray(entries) || entries.length < 2) return null;
+  const s = sortByTimeDesc(entries);
+  const a = getSgv(s[0]);
+  const b = getSgv(s[1]);
+  if (a === null || b === null) return null;
+  return a - b;
+}
+function computeStep(entries){
+  // “직전대비 변화량”: 최신과 5분 전(또는 바로 전 샘플) 비교
+  if (!Array.isArray(entries) || entries.length < 2) return null;
+  const s = sortByTimeDesc(entries);
+  const latest = s[0];
+  const latestT = safeNum(latest?.date, null);
+  const latestV = getSgv(latest);
+  if (latestT === null || latestV === null) return null;
+
+  // 4~7분 전 사이에서 가장 가까운 샘플 찾기
+  const targetMs = latestT - 5*60*1000;
+  let best = null;
+  let bestAbs = Infinity;
+
+  for (let i=1;i<s.length;i++){
+    const t = safeNum(s[i]?.date, null);
+    const v = getSgv(s[i]);
+    if (t === null || v === null) continue;
+    const abs = Math.abs(t - targetMs);
+    if (abs < bestAbs){
+      bestAbs = abs;
+      best = { t, v };
+    }
+  }
+  if (!best) return null;
+  return latestV - best.v;
+}
+
+/* ===== 배경 그래프 (라인 없이 하부 채움, 구간별 색) ===== */
+function zoneColor(bg){
+  // 범위 밖은 빨강 처리
+  if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
+  if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
+  if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
+  if (bg >= 201 && bg <= 240) return "rgba(255,170,64,0.32)";
+  if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
+  return "rgba(255,92,92,0.28)";
+}
+
+function drawAreaBackground(canvas, series){
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  // 배경
+  ctx.clearRect(0,0,cssW,cssH);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0,0,cssW,cssH);
+
+  if (!series || series.length < 2) return;
+
+  const padX = 10;
+  const padY = 10;
+  const w = cssW - padX*2;
+  const h = cssH - padY*2;
+
+  const xs = series.map(p=>p.t);
+  const ys = series.map(p=>p.v);
+
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+
+  // y 스케일은 안정적으로 고정 범위(40~401) + 약간 패딩
+  const minY = 40;
+  const maxY = 401;
+
+  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w;
+  const yMap = (v) => padY + (1 - ((v - minY) / (maxY - minY))) * h;
+
+  // 하부 채움(구간별 색): 각 세그먼트별 폴리곤을 채움
+  for (let i=0;i<series.length-1;i++){
+    const p0 = series[i];
+    const p1 = series[i+1];
+
+    const x0 = xMap(p0.t);
+    const x1 = xMap(p1.t);
+    const y0 = yMap(p0.v);
+    const y1 = yMap(p1.v);
+
+    const mid = (p0.v + p1.v) / 2;
+    ctx.fillStyle = zoneColor(mid);
+
+    ctx.beginPath();
+    ctx.moveTo(x0, h + padY);
+    ctx.lineTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x1, h + padY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 아주 은은한 상단 페이드(텍스트 가독성)
+  const grad = ctx.createLinearGradient(0, 0, 0, cssH);
+  grad.addColorStop(0, "rgba(0,0,0,0.75)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.35)");
+  grad.addColorStop(1, "rgba(0,0,0,0.10)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,cssW,cssH);
+}
+
+/* ===== 데이터 로드/렌더 ===== */
+let cachedProfile = null;
+let cachedEntries = null;
+let cachedTreatments = null;
+
+async function loadData(){
+  const base = NS_BASE_URL.replace(/\/+$/,"");
+  const profileUrl = withToken(`${base}/api/v1/profile.json`);
+  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=48`);     // 최근 약 4시간(5분 간격 기준)
+  const trUrl = withToken(`${base}/api/v1/treatments.json?count=200`);
+  const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
+  cachedProfile = p;
+  cachedEntries = e;
+  cachedTreatments = t;
+}
+
+function render(){
+  const bgEl = document.getElementById("bgTxt");
+  const deltaEl = document.getElementById("deltaTxt");
+  const stepEl = document.getElementById("stepTxt");
+  const iobEl = document.getElementById("iobTxt");
+  const cobEl = document.getElementById("cobTxt");
+
+  if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
+
+  const s = sortByTimeDesc(cachedEntries);
+  const latestV = getSgv(s[0]);
+  const delta = computeDelta(cachedEntries);
+  const step = computeStep(cachedEntries);
+
+  bgEl.textContent = (latestV !== null) ? String(Math.round(latestV)) : "--";
+
+  if (delta === null){
+    deltaEl.textContent = "--";
+    deltaEl.className = "delta";
+  } else {
+    const sign = delta > 0 ? "+" : "";
+    deltaEl.textContent = sign + String(Math.round(delta));
+    deltaEl.className = "delta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
+  }
+
+  if (step === null){
+    stepEl.textContent = "--";
+  } else {
+    const sign = step > 0 ? "+" : "";
+    stepEl.textContent = sign + String(Math.round(step));
+  }
+
+  const nowMs = safeNum(s[0]?.date, Date.now()) ?? Date.now();
+  const { dia, carbsHr } = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
+
+  const iob = (Number.isFinite(dia) && dia > 0 && cachedTreatments) ? computeIOB(cachedTreatments, nowMs, dia) : null;
+  const cob = (Number.isFinite(carbsHr) && carbsHr > 0 && cachedTreatments) ? computeCOB(cachedTreatments, nowMs, carbsHr) : null;
+
+  iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
+  cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
+
+  // 배경 그래프: 최근 1시간만 잘라서 그림
+  const endT = nowMs;
+  const startT = endT - 60*60*1000;
+
+  const series = cachedEntries
+    .filter(e => {
+      const t = safeNum(e.date, null);
+      const v = getSgv(e);
+      return Number.isFinite(t) && v !== null && t >= startT && t <= endT;
+    })
+    .sort((a,b)=>safeNum(a.date,0)-safeNum(b.date,0))
+    .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }))
+    .filter(p => p.v !== null);
+
+  drawAreaBackground(document.getElementById("bgCanvas"), series);
+}
+
+let updating = false;
+async function refresh(){
+  if (updating) return;
+  updating = true;
+  try{
+    await loadData();
+    render();
+  }catch(e){
+    // 모니터 페이지는 조용히 실패
+    console.warn("monitor refresh failed", e);
+  }finally{
+    updating = false;
+  }
+}
+
+(function init(){
+  refresh();
+  setInterval(refresh, 30 * 1000);
+  window.addEventListener("resize", () => { try{ render(); }catch(_){ } });
+})();
+</script>
+</body>
+</html>
