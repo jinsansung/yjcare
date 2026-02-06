@@ -171,25 +171,6 @@
       -webkit-backdrop-filter: blur(12px);
     }
 
-    #calcSheet{
-      position:absolute;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding: calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
-    }
-
-    #calcModal .calcWrap{
-      width: min(520px, 100%);
-      max-height: min(92vh, 860px);
-      overflow:auto;
-      -webkit-overflow-scrolling: touch;
-      border-radius: 18px;
-    }
-
-    #calcModal .calcStack{ display:flex; flex-direction:column; gap:12px; }
-
     /* 카드 배경도 살짝 더 불투명하게 */
     #calcModal .calcCard{
       background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.05));
@@ -445,7 +426,6 @@
               <span>COB <strong id="calc_cobTxt">--</strong>g</span>
             </div>
 
-            <canvas id="calc_chart" class="calcChart" width="900" height="280"></canvas>
           </div>
 
           <div class="calcCard">
@@ -1026,10 +1006,23 @@ function tickAnim(){
     const k = easeInOutQuint(t);
     const shift = anim.shiftPx * k;
 
-    ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
+    // 핵심: 스케일링 금지, 크롭해서 이동
+    const sx = Math.floor(shift * dpr);
+    const sw = Math.floor((cssW - shift) * dpr);
+    const sh = Math.floor(cssH * dpr);
 
-    const featherW = Math.min(42, Math.max(18, anim.shiftPx * 0.18));
-    drawEdgeFeather(ctx, cssW - featherW, featherW, cssH, "toRight");
+    const dx = 0;
+    const dw = (cssW - shift);
+    const dh = cssH;
+
+    if (sw > 0 && dw > 0){
+      ctx.drawImage(bufOld, sx, 0, sw, sh, dx, 0, dw, dh);
+    }
+
+    // 오른쪽 빈 영역은 배경만 보이게 두고, 경계에 페더만
+    const boundaryX = cssW - shift;
+    const featherW = Math.min(54, Math.max(20, anim.shiftPx * 0.25));
+    drawEdgeFeather(ctx, boundaryX, featherW, cssH, "toRight");
 
     if (t >= 1){
       anim.mode = "reveal";
@@ -1043,19 +1036,36 @@ function tickAnim(){
     anim.revealW = anim.shiftPx * k;
 
     const gapX = cssW - anim.shiftPx;
-
-    ctx.drawImage(bufOld, -anim.shiftPx, 0, cssW, cssH);
-
     const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
+
+    // 1) 왼쪽 영역: old를 크롭해서 그대로 고정(최종 shift 상태)
+    {
+      const sx = Math.floor(anim.shiftPx * dpr);
+      const sw = Math.floor((cssW - anim.shiftPx) * dpr);
+      const sh = Math.floor(cssH * dpr);
+      const dw = cssW - anim.shiftPx;
+
+      if (sw > 0 && dw > 0){
+        ctx.drawImage(bufOld, sx, 0, sw, sh, 0, 0, dw, cssH);
+      }
+    }
+
+    // 2) 오른쪽 gap: new의 "오른쪽 끝 영역"을 왼쪽에서 오른쪽으로 채움
     if (clipW > 0){
+      const sx2 = Math.floor((cssW - anim.shiftPx) * dpr);
+      const sw2 = Math.floor(clipW * dpr);
+      const sh2 = Math.floor(cssH * dpr);
+
       ctx.save();
       ctx.beginPath();
       ctx.rect(gapX, 0, clipW, cssH);
       ctx.clip();
-      ctx.drawImage(bufNew, 0, 0, cssW, cssH);
+
+      ctx.drawImage(bufNew, sx2, 0, sw2, sh2, gapX, 0, clipW, cssH);
       ctx.restore();
 
-      const featherW = Math.min(44, Math.max(18, anim.shiftPx * 0.22));
+      // 채워지는 경계에 페더
+      const featherW = Math.min(54, Math.max(20, anim.shiftPx * 0.25));
       const edgeX = gapX + clipW - featherW;
       if (edgeX >= gapX){
         drawEdgeFeather(ctx, edgeX, featherW, cssH, "toRight");
@@ -1126,7 +1136,9 @@ function renderMonitor(){
     drawSmoothAreaTo(bufOld, series0, nextFill);
     drawSmoothAreaTo(bufNew, series0, nextFill);
     lastRenderedEndMs = latestMs;
-    if (!isAnimating()) requestAnimationFrame(tickAnim);
+
+    // 여기: 상태값과 무관하게 최초 1회는 반드시 그리기
+    requestAnimationFrame(tickAnim);
     return;
   }
 
@@ -1224,59 +1236,6 @@ function pickLatestEntry(entries){
   return best;
 }
 
-function drawCalcChart(canvas, points){
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0,0,w,h);
-
-  const padX = 22, padY = 18;
-  const iw = w - padX*2, ih = h - padY*2;
-
-  ctx.globalAlpha = 0.9;
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  for (let i=1;i<=3;i++){
-    const y = padY + (ih/4)*i;
-    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX+iw, y); ctx.stroke();
-  }
-
-  if (!points || points.length < 2) return;
-
-  const xs = points.map(p=>p.t);
-  const ys = points.map(p=>p.v);
-
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  let minY = Math.min(...ys), maxY = Math.max(...ys);
-  if (minY === maxY){ minY -= 10; maxY += 10; }
-  const yPad = Math.max(12, (maxY - minY) * 0.12);
-  minY -= yPad; maxY += yPad;
-
-  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * iw;
-  const yMap = (v) => padY + (1 - (v - minY) / (maxY - minY)) * ih;
-
-  ctx.lineWidth = 4;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(255,255,255,0.92)";
-
-  ctx.beginPath();
-  ctx.moveTo(xMap(points[0].t), yMap(points[0].v));
-  for (let i=1;i<points.length;i++){
-    ctx.lineTo(xMap(points[i].t), yMap(points[i].v));
-  }
-  ctx.stroke();
-
-  const last = points[points.length-1];
-  const lx = xMap(last.t), ly = yMap(last.v);
-
-  ctx.fillStyle = "rgba(255,255,255,1)";
-  ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI*2); ctx.fill();
-
-  ctx.font = "600 22px -apple-system, system-ui, Segoe UI, Roboto, sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
-  ctx.fillText(String(Math.round(last.v)), Math.min(lx+14, w-60), Math.max(ly-12, 28));
-}
-
 /* 선택한 기준시간(atMs)으로 IOB/COB 계산 */
 function calcGetIobCobAt(atMs){
   if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
@@ -1357,8 +1316,6 @@ function calcUpdateUI(){
       return (v === null) ? null : { t, v };
     })
     .filter(Boolean);
-
-  drawCalcChart(document.getElementById("calc_chart"), series);
 
   /* 기준시간 기반 IOB/COB 표시 및 차감 */
   const rt = calcGetIobCobAt(atMs);
