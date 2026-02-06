@@ -64,6 +64,7 @@
       font-weight: 850;
       letter-spacing: -2.2px;
       color: var(--text);
+      text-align:center;
     }
 
     .arrow{
@@ -72,7 +73,7 @@
       letter-spacing: -1px;
       color: var(--muted);
       min-width: 96px;
-      text-align:left;
+      text-align:center;     /* 핵심: 화살표 박스도 센터 */
       line-height: 1;
       white-space:nowrap;
       transform: translateY(2px);
@@ -88,7 +89,7 @@
       gap: 22px;
       flex-wrap:wrap;
       color: var(--muted);
-      font-size: 24px;   /* 기존 16px -> 1.5배 */
+      font-size: 24px;
       font-weight: 700;
       letter-spacing: 0.2px;
       line-height: 1.25;
@@ -192,8 +193,6 @@ function directionToArrow(dirRaw){
 
   if (map[key]) return map[key];
 
-  // Nightscout가 다른 케이스로 내려오는 경우 보정
-  // 예: "Double Up", "Single Down" 같은 공백 포함
   const compact = key.replace(/\s+/g, "");
   if (map[compact]) return map[compact];
 
@@ -344,6 +343,9 @@ let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
 
+/* 실시간 경과시간용 */
+let latestEntryMsForAge = null;
+
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
@@ -377,16 +379,15 @@ function render(){
   arrowEl.textContent = arrow;
   arrowEl.className = "arrow " + cls;
 
-  // 경과시간 (최신 엔트리 기준)
-  const nowMs = Date.now();
   const latestMs = safeNum(latest?.date, null);
+  latestEntryMsForAge = latestMs;
+
   if (latestMs !== null){
-    ageEl.textContent = formatAge(nowMs - latestMs);
+    ageEl.textContent = formatAge(Date.now() - latestMs);
   } else {
     ageEl.textContent = "--:--";
   }
 
-  // 변화량 (최신 - 직전)
   const prevV = getSgv(prev);
   if (latestV !== null && prevV !== null){
     const d = latestV - prevV;
@@ -409,8 +410,7 @@ function render(){
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  // 배경 그래프: 최근 1시간
-  const endT = (latestMs !== null) ? latestMs : nowMs;
+  const endT = (latestMs !== null) ? latestMs : Date.now();
   const startT = endT - 60*60*1000;
 
   const series = cachedEntries
@@ -442,7 +442,21 @@ async function refresh(){
 
 (function init(){
   refresh();
+
+  /* 데이터는 30초마다 */
   setInterval(refresh, 30 * 1000);
+
+  /* 경과시간은 1초마다 실시간 갱신 */
+  setInterval(() => {
+    const ageEl = document.getElementById("ageTxt");
+    if (!ageEl) return;
+    if (Number.isFinite(latestEntryMsForAge)) {
+      ageEl.textContent = formatAge(Date.now() - latestEntryMsForAge);
+    } else {
+      ageEl.textContent = "--:--";
+    }
+  }, 1000);
+
   window.addEventListener("resize", () => { try{ render(); }catch(_){ } });
 })();
 </script>
