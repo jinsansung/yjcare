@@ -9,7 +9,7 @@
     :root{
       --bg:#000000;
       --text:#f4f4f7;
-      --muted:rgba(244,244,247,0.65);
+      --muted:rgba(244,244,247,0.68);
       --hair:rgba(255,255,255,0.10);
     }
     *{box-sizing:border-box}
@@ -37,71 +37,78 @@
       align-items:center;
       justify-content:center;
       padding: 12px;
-      pointer-events:none; /* 모니터용: 터치 무시 */
+      pointer-events:none;
     }
     .panel{
       width:100%;
-      max-width: 680px;
+      max-width: 900px;
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap: 8px;
+      gap: 10px;
       text-align:center;
     }
 
     .mainRow{
       display:flex;
-      align-items:baseline;
+      align-items:center;
       justify-content:center;
-      gap: 14px;
+      gap: 18px;
       width:100%;
     }
+
     .bg{
-      font-size: 96px;
-      line-height: 0.95;
-      font-weight: 800;
-      letter-spacing: -1.5px;
+      font-size: 192px;
+      line-height: 0.92;
+      font-weight: 850;
+      letter-spacing: -2.2px;
       color: var(--text);
     }
-    .delta{
-      font-size: 40px;
-      font-weight: 750;
-      letter-spacing: -0.6px;
+
+    .arrow{
+      font-size: 88px;
+      font-weight: 850;
+      letter-spacing: -1px;
       color: var(--muted);
-      min-width: 110px;
+      min-width: 96px;
       text-align:left;
+      line-height: 1;
       white-space:nowrap;
+      transform: translateY(2px);
     }
-    .delta.up{ color: rgba(255,92,92,0.95); }
-    .delta.down{ color: rgba(110,231,183,0.95); }
+    .arrow.up{ color: rgba(255,92,92,0.95); }
+    .arrow.down{ color: rgba(110,231,183,0.95); }
+    .arrow.flat{ color: rgba(244,244,247,0.68); }
 
     .subRow{
       display:flex;
       align-items:center;
       justify-content:center;
-      gap: 16px;
+      gap: 22px;
       flex-wrap:wrap;
       color: var(--muted);
-      font-size: 16px;
-      font-weight: 650;
+      font-size: 24px;   /* 기존 16px -> 1.5배 */
+      font-weight: 700;
       letter-spacing: 0.2px;
+      line-height: 1.25;
     }
     .subRow span b{
       color: var(--text);
-      font-weight: 750;
+      font-weight: 800;
     }
 
-    /* 초소형 가로 모니터 대응: 폰트 자동 축소 */
+    /* 초소형 모니터 대응 */
     @media (max-width: 520px){
-      .bg{ font-size: 76px; }
-      .delta{ font-size: 34px; min-width: 96px; }
-      .subRow{ font-size: 14px; }
+      .bg{ font-size: 156px; }
+      .arrow{ font-size: 74px; min-width: 84px; }
+      .subRow{ font-size: 20px; gap: 16px; }
+      .panel{ gap: 8px; }
     }
-    @media (max-height: 220px){
-      .bg{ font-size: 72px; }
-      .delta{ font-size: 30px; }
-      .subRow{ font-size: 13px; }
+    @media (max-height: 240px){
+      .bg{ font-size: 148px; }
+      .arrow{ font-size: 68px; }
+      .subRow{ font-size: 18px; gap: 14px; }
       .panel{ gap: 6px; }
     }
   </style>
@@ -113,11 +120,11 @@
     <div class="panel">
       <div class="mainRow">
         <div id="bgTxt" class="bg">--</div>
-        <div id="deltaTxt" class="delta">--</div>
+        <div id="arrowTxt" class="arrow flat">-</div>
       </div>
 
       <div class="subRow">
-        <span>직전대비 <b id="stepTxt">--</b></span>
+        <span><b id="ageTxt">--:--</b> (<b id="chgTxt">--</b>)</span>
         <span>IOB <b id="iobTxt">--</b>U</span>
         <span>COB <b id="cobTxt">--</b>g</span>
       </div>
@@ -125,9 +132,9 @@
   </div>
 
 <script>
-/* ===== 설정(코드에만 존재) ===== */
+/* ===== 설정 ===== */
 const NS_BASE_URL = "https://ns.whalesound.net";
-const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
+const NS_TOKEN = ""; // 옵션
 
 /* ===== 유틸 ===== */
 function withToken(url){
@@ -145,6 +152,53 @@ function safeNum(x, fallback=null){
   return Number.isFinite(n) ? n : fallback;
 }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function getSgv(e){
+  return safeNum(e?.sgv, null) ?? safeNum(e?.mbg, null);
+}
+function sortByTimeDesc(arr){
+  return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
+}
+function pad2(n){ return String(n).padStart(2, "0"); }
+
+/* 경과시간 mm:ss (1시간 이상이면 h:mm:ss) */
+function formatAge(ms){
+  if (!Number.isFinite(ms) || ms < 0) return "--:--";
+  const s = Math.floor(ms / 1000);
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (hh > 0) return `${hh}:${pad2(mm)}:${pad2(ss)}`;
+  return `${mm}:${pad2(ss)}`;
+}
+
+/* ===== direction -> 화살표 ===== */
+function directionToArrow(dirRaw){
+  const dir = (dirRaw || "").toString().trim();
+  const key = dir.toLowerCase();
+
+  if (!dir || key === "none" || key === "flat" || key === "notcomputable" || key === "rateoutofrange"){
+    return { arrow: "-", cls: "flat" };
+  }
+
+  const map = {
+    "doubleup": { arrow: "↑↑", cls: "up" },
+    "singleup": { arrow: "↑", cls: "up" },
+    "fortyfiveup": { arrow: "↗", cls: "up" },
+
+    "doubledown": { arrow: "↓↓", cls: "down" },
+    "singledown": { arrow: "↓", cls: "down" },
+    "fortyfivedown": { arrow: "↘", cls: "down" }
+  };
+
+  if (map[key]) return map[key];
+
+  // Nightscout가 다른 케이스로 내려오는 경우 보정
+  // 예: "Double Up", "Single Down" 같은 공백 포함
+  const compact = key.replace(/\s+/g, "");
+  if (map[compact]) return map[compact];
+
+  return { arrow: "-", cls: "flat" };
+}
 
 /* ===== 프로파일(필요 최소: dia, carbs_hr) ===== */
 function pickProfileRecord(profileArr){
@@ -212,52 +266,8 @@ function computeCOB(treatments, atMs, carbsHr){
   return cob;
 }
 
-/* ===== 혈당/델타/직전대비 ===== */
-function sortByTimeDesc(arr){
-  return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
-}
-function getSgv(e){
-  return safeNum(e?.sgv, null) ?? safeNum(e?.mbg, null);
-}
-function computeDelta(entries){
-  if (!Array.isArray(entries) || entries.length < 2) return null;
-  const s = sortByTimeDesc(entries);
-  const a = getSgv(s[0]);
-  const b = getSgv(s[1]);
-  if (a === null || b === null) return null;
-  return a - b;
-}
-function computeStep(entries){
-  // “직전대비 변화량”: 최신과 5분 전(또는 바로 전 샘플) 비교
-  if (!Array.isArray(entries) || entries.length < 2) return null;
-  const s = sortByTimeDesc(entries);
-  const latest = s[0];
-  const latestT = safeNum(latest?.date, null);
-  const latestV = getSgv(latest);
-  if (latestT === null || latestV === null) return null;
-
-  // 4~7분 전 사이에서 가장 가까운 샘플 찾기
-  const targetMs = latestT - 5*60*1000;
-  let best = null;
-  let bestAbs = Infinity;
-
-  for (let i=1;i<s.length;i++){
-    const t = safeNum(s[i]?.date, null);
-    const v = getSgv(s[i]);
-    if (t === null || v === null) continue;
-    const abs = Math.abs(t - targetMs);
-    if (abs < bestAbs){
-      bestAbs = abs;
-      best = { t, v };
-    }
-  }
-  if (!best) return null;
-  return latestV - best.v;
-}
-
 /* ===== 배경 그래프 (라인 없이 하부 채움, 구간별 색) ===== */
 function zoneColor(bg){
-  // 범위 밖은 빨강 처리
   if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
   if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
   if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
@@ -265,7 +275,6 @@ function zoneColor(bg){
   if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
   return "rgba(255,92,92,0.28)";
 }
-
 function drawAreaBackground(canvas, series){
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -278,7 +287,6 @@ function drawAreaBackground(canvas, series){
   canvas.style.height = cssH + "px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
-  // 배경
   ctx.clearRect(0,0,cssW,cssH);
   ctx.fillStyle = "#000";
   ctx.fillRect(0,0,cssW,cssH);
@@ -296,14 +304,12 @@ function drawAreaBackground(canvas, series){
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
 
-  // y 스케일은 안정적으로 고정 범위(40~401) + 약간 패딩
   const minY = 40;
   const maxY = 401;
 
   const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w;
   const yMap = (v) => padY + (1 - ((v - minY) / (maxY - minY))) * h;
 
-  // 하부 채움(구간별 색): 각 세그먼트별 폴리곤을 채움
   for (let i=0;i<series.length-1;i++){
     const p0 = series[i];
     const p1 = series[i+1];
@@ -325,11 +331,10 @@ function drawAreaBackground(canvas, series){
     ctx.fill();
   }
 
-  // 아주 은은한 상단 페이드(텍스트 가독성)
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
-  grad.addColorStop(0, "rgba(0,0,0,0.75)");
-  grad.addColorStop(0.35, "rgba(0,0,0,0.35)");
-  grad.addColorStop(1, "rgba(0,0,0,0.10)");
+  grad.addColorStop(0, "rgba(0,0,0,0.76)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.40)");
+  grad.addColorStop(1, "rgba(0,0,0,0.12)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,cssW,cssH);
 }
@@ -342,7 +347,7 @@ let cachedTreatments = null;
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
-  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=48`);     // 최근 약 4시간(5분 간격 기준)
+  const entriesUrl = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
   const trUrl = withToken(`${base}/api/v1/treatments.json?count=200`);
   const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
   cachedProfile = p;
@@ -352,47 +357,60 @@ async function loadData(){
 
 function render(){
   const bgEl = document.getElementById("bgTxt");
-  const deltaEl = document.getElementById("deltaTxt");
-  const stepEl = document.getElementById("stepTxt");
+  const arrowEl = document.getElementById("arrowTxt");
+  const ageEl = document.getElementById("ageTxt");
+  const chgEl = document.getElementById("chgTxt");
   const iobEl = document.getElementById("iobTxt");
   const cobEl = document.getElementById("cobTxt");
 
   if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
 
   const s = sortByTimeDesc(cachedEntries);
-  const latestV = getSgv(s[0]);
-  const delta = computeDelta(cachedEntries);
-  const step = computeStep(cachedEntries);
+  const latest = s[0];
+  const prev = s[1];
 
+  const latestV = getSgv(latest);
   bgEl.textContent = (latestV !== null) ? String(Math.round(latestV)) : "--";
 
-  if (delta === null){
-    deltaEl.textContent = "--";
-    deltaEl.className = "delta";
+  const dir = latest?.direction;
+  const { arrow, cls } = directionToArrow(dir);
+  arrowEl.textContent = arrow;
+  arrowEl.className = "arrow " + cls;
+
+  // 경과시간 (최신 엔트리 기준)
+  const nowMs = Date.now();
+  const latestMs = safeNum(latest?.date, null);
+  if (latestMs !== null){
+    ageEl.textContent = formatAge(nowMs - latestMs);
   } else {
-    const sign = delta > 0 ? "+" : "";
-    deltaEl.textContent = sign + String(Math.round(delta));
-    deltaEl.className = "delta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
+    ageEl.textContent = "--:--";
   }
 
-  if (step === null){
-    stepEl.textContent = "--";
+  // 변화량 (최신 - 직전)
+  const prevV = getSgv(prev);
+  if (latestV !== null && prevV !== null){
+    const d = latestV - prevV;
+    const sign = d > 0 ? "+" : "";
+    chgEl.textContent = sign + String(Math.round(d));
   } else {
-    const sign = step > 0 ? "+" : "";
-    stepEl.textContent = sign + String(Math.round(step));
+    chgEl.textContent = "--";
   }
 
-  const nowMs = safeNum(s[0]?.date, Date.now()) ?? Date.now();
   const { dia, carbsHr } = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
 
-  const iob = (Number.isFinite(dia) && dia > 0 && cachedTreatments) ? computeIOB(cachedTreatments, nowMs, dia) : null;
-  const cob = (Number.isFinite(carbsHr) && carbsHr > 0 && cachedTreatments) ? computeCOB(cachedTreatments, nowMs, carbsHr) : null;
+  const iob = (Number.isFinite(dia) && dia > 0 && cachedTreatments && latestMs !== null)
+    ? computeIOB(cachedTreatments, latestMs, dia)
+    : null;
+
+  const cob = (Number.isFinite(carbsHr) && carbsHr > 0 && cachedTreatments && latestMs !== null)
+    ? computeCOB(cachedTreatments, latestMs, carbsHr)
+    : null;
 
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  // 배경 그래프: 최근 1시간만 잘라서 그림
-  const endT = nowMs;
+  // 배경 그래프: 최근 1시간
+  const endT = (latestMs !== null) ? latestMs : nowMs;
   const startT = endT - 60*60*1000;
 
   const series = cachedEntries
@@ -416,7 +434,6 @@ async function refresh(){
     await loadData();
     render();
   }catch(e){
-    // 모니터 페이지는 조용히 실패
     console.warn("monitor refresh failed", e);
   }finally{
     updating = false;
