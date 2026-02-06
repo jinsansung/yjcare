@@ -258,6 +258,16 @@
     }
     #calcModal .calcMiniLine strong{ color: rgba(244,244,247,1); font-weight:650; letter-spacing:0.2px; }
 
+    #calcModal canvas.calcChart{
+      width:100%;
+      height:140px;
+      display:block;
+      border-radius:14px;
+      background: rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.12);
+      margin-top:12px;
+    }
+
     #calcModal .calcTimeDisplay{
       width:100%;
       padding:10px 12px;
@@ -431,6 +441,7 @@
               <span>IOB <strong id="calc_iobTxt">--</strong>U</span>
               <span>COB <strong id="calc_cobTxt">--</strong>g</span>
             </div>
+
           </div>
 
           <div class="calcCard">
@@ -682,7 +693,7 @@ function computeCOB(treatments, atMs, carbsHr){
 }
 
 /* =========================
-   컬러 (배경 A + 차트 B)
+   컬러 (모니터)
 ========================= */
 function colorForBg(bg){
   if (!Number.isFinite(bg)) return "rgba(255,255,255,0.10)";
@@ -710,10 +721,10 @@ function lerpColor(c1, c2, t){
 const BG_DARK_MIX = 0.62;
 function darkenRgba(rgbaStr, mixToBlack){
   const c = parseRgba(rgbaStr);
-  const t = clamp01(mixToBlack);
-  const r = Math.round(c.r * (1 - t));
-  const g = Math.round(c.g * (1 - t));
-  const b = Math.round(c.b * (1 - t));
+  const tt = clamp01(mixToBlack);
+  const r = Math.round(c.r * (1 - tt));
+  const g = Math.round(c.g * (1 - tt));
+  const b = Math.round(c.b * (1 - tt));
   return `rgba(${r},${g},${b},1)`;
 }
 function applyStageColor(rgba){
@@ -728,7 +739,7 @@ let colorAnim = {
   from:"rgba(255,255,255,0.10)",
   to:"rgba(255,255,255,0.10)",
   start:0,
-  dur:1800
+  dur:1600
 };
 function startColorTransition(next){
   if (!colorAnim.to){
@@ -769,6 +780,7 @@ function buildSeriesFor1h(entries, endMs){
     return { startMs, endMs, series: [] };
   }
 
+  // startMs 이전의 가장 가까운 값(없으면 startMs 이후 첫 값)
   let anchor = null;
   for (let i=points.length-1;i>=0;i--){
     if (points[i].t <= startMs){ anchor = points[i]; break; }
@@ -782,6 +794,7 @@ function buildSeriesFor1h(entries, endMs){
   const inWindow = points.filter(p => p.t >= startMs && p.t <= endMs);
   const merged = [{ t: startMs, v: anchor.v }, ...inWindow];
 
+  // 1분 단위로 리샘플(1시간을 화면 전체 폭에 매핑하기 위한 고정 타임라인)
   const stepMs = 60 * 1000;
   const resampled = [];
   let j = 0;
@@ -811,8 +824,51 @@ function buildSeriesFor1h(entries, endMs){
 
 const CHART_AREA_ALPHA = 0.56;
 
-/* 버퍼에는 "흰색 마스크(알파)"만 그려둔다. (색은 프레임에서 tint로 입힘) */
-function drawSmoothArea(canvas, seriesObj){
+/* =========================
+   monotone cubic (오버슈트 방지)
+========================= */
+function buildMonotoneTangents(pts){
+  const n = pts.length;
+  if (n < 2) return [];
+
+  const x = pts.map(p => p.x);
+  const y = pts.map(p => p.y);
+
+  const d = new Array(n - 1);
+  const m = new Array(n);
+
+  for (let i = 0; i < n - 1; i++){
+    const dx = x[i+1] - x[i];
+    d[i] = dx !== 0 ? (y[i+1] - y[i]) / dx : 0;
+  }
+
+  m[0] = d[0];
+  m[n-1] = d[n-2];
+  for (let i = 1; i < n - 1; i++){
+    m[i] = (d[i-1] + d[i]) / 2;
+  }
+
+  // Fritsch-Carlson monotone enforcement
+  for (let i = 0; i < n - 1; i++){
+    if (d[i] === 0){
+      m[i] = 0;
+      m[i+1] = 0;
+    } else {
+      const a = m[i] / d[i];
+      const b = m[i+1] / d[i];
+      const s = a*a + b*b;
+      if (s > 9){
+        const t = 3 / Math.sqrt(s);
+        m[i] = t * a * d[i];
+        m[i+1] = t * b * d[i];
+      }
+    }
+  }
+
+  return m;
+}
+
+function drawSmoothArea(canvas, seriesObj, fillColor){
   const series = seriesObj?.series || [];
   const startMs = seriesObj?.startMs;
   const endMs = seriesObj?.endMs;
@@ -831,10 +887,20 @@ function drawSmoothArea(canvas, seriesObj){
   ctx.clearRect(0,0,cssW,cssH);
 
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
-  if (!series || series.length < 2) return;
+
+  if (!series || series.length < 2){
+    const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
+    grad0.addColorStop(0, "rgba(0,0,0,0.42)");
+    grad0.addColorStop(0.35, "rgba(0,0,0,0.22)");
+    grad0.addColorStop(1, "rgba(0,0,0,0.06)");
+    ctx.fillStyle = grad0;
+    ctx.fillRect(0,0,cssW,cssH);
+    return;
+  }
 
   const minY = 40;
   const maxY = 401;
+
   const minX = startMs;
   const maxX = endMs;
 
@@ -846,33 +912,42 @@ function drawSmoothArea(canvas, seriesObj){
 
   const pts = series.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
 
-  const tension = 0.5;
-  const cp = (p0, p1, p2, p3) => {
-    const d1 = { x: (p2.x - p0.x) * tension, y: (p2.y - p0.y) * tension };
-    const d2 = { x: (p3.x - p1.x) * tension, y: (p3.y - p1.y) * tension };
-    return {
-      c1: { x: p1.x + d1.x / 6, y: p1.y + d1.y / 6 },
-      c2: { x: p2.x - d2.x / 6, y: p2.y - d2.y / 6 }
-    };
-  };
+  // monotone cubic -> bezier control points
+  const tangents = buildMonotoneTangents(pts);
 
   ctx.globalAlpha = CHART_AREA_ALPHA;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i=0;i<pts.length-1;i++){
-    const p0 = pts[Math.max(0, i-1)];
-    const p1 = pts[i];
-    const p2 = pts[i+1];
-    const p3 = pts[Math.min(pts.length-1, i+2)];
-    const { c1, c2 } = cp(p0,p1,p2,p3);
-    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+
+  for (let i = 0; i < pts.length - 1; i++){
+    const p0 = pts[i];
+    const p1 = pts[i+1];
+    const dx = p1.x - p0.x;
+
+    const m0 = tangents[i] ?? 0;
+    const m1 = tangents[i+1] ?? 0;
+
+    const c1x = p0.x + dx / 3;
+    const c1y = p0.y + (m0 * dx) / 3;
+    const c2x = p1.x - dx / 3;
+    const c2y = p1.y - (m1 * dx) / 3;
+
+    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p1.x, p1.y);
   }
+
   ctx.lineTo(pts[pts.length-1].x, cssH);
   ctx.lineTo(pts[0].x, cssH);
   ctx.closePath();
-  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.fillStyle = fillColor;
   ctx.fill();
   ctx.globalAlpha = 1;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, cssH);
+  grad.addColorStop(0, "rgba(0,0,0,0.52)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.28)");
+  grad.addColorStop(1, "rgba(0,0,0,0.09)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,cssW,cssH);
 }
 
 /* =========================
@@ -892,10 +967,10 @@ function ensureBufferSize(buf, cssW, cssH){
   buf._cssW = cssW;
   buf._cssH = cssH;
 }
-function drawSmoothAreaTo(buf, series){
+function drawSmoothAreaTo(buf, series, fillColor){
   buf._cssW = buf._cssW ?? window.innerWidth;
   buf._cssH = buf._cssH ?? window.innerHeight;
-  drawSmoothArea(buf, series);
+  drawSmoothArea(buf, series, fillColor);
 }
 
 function resizeStage(){
@@ -951,14 +1026,17 @@ async function loadData(){
   cachedCarbsHr = pe.carbsHr;
 }
 
-/* 버퍼(마스크)에 tint 색을 입혀서 그리기 */
-function drawTintedImage(ctx, buf, sx, sy, sw, sh, dx, dy, dw, dh, tint){
-  ctx.save();
-  ctx.drawImage(buf, sx, sy, sw, sh, dx, dy, dw, dh);
-  ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = tint;
-  ctx.fillRect(dx, dy, dw, dh);
-  ctx.restore();
+function drawEdgeFeather(ctx, xStart, width, cssH, direction){
+  const g = ctx.createLinearGradient(
+    direction === "toRight" ? xStart : (xStart + width),
+    0,
+    direction === "toRight" ? (xStart + width) : xStart,
+    0
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = g;
+  ctx.fillRect(xStart, 0, width, cssH);
 }
 
 function tickAnim(){
@@ -978,12 +1056,10 @@ function tickAnim(){
     canvas.style.height = cssH + "px";
   }
   ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  /* 캔버스는 투명으로 비움: 오른쪽 gap은 배경 A가 그대로 보임 */
   ctx.clearRect(0,0,cssW,cssH);
 
-  const tint = currentFillColor();
-  const bgFill = darkenRgba(tint, BG_DARK_MIX);
+  const fill = currentFillColor();
+  const bgFill = darkenRgba(fill, BG_DARK_MIX);
   applyStageColor(bgFill);
 
   const now = performance.now();
@@ -993,14 +1069,23 @@ function tickAnim(){
     const k = easeInOutQuint(t);
     const shift = anim.shiftPx * k;
 
-    /* 차트 B만 왼쪽으로 이동. 오른쪽 gap은 비워둠 */
-    drawTintedImage(
-      ctx,
-      bufOld,
-      0, 0, cssW, cssH,
-      -shift, 0, cssW, cssH,
-      tint
-    );
+    // 스케일링 금지, 크롭해서 이동 (round로 통일)
+    const sx = Math.round(shift * dpr);
+    const sw = Math.round((cssW - shift) * dpr);
+    const sh = Math.round(cssH * dpr);
+
+    const dx = 0;
+    const dw = (cssW - shift);
+    const dh = cssH;
+
+    if (sw > 0 && dw > 0){
+      ctx.drawImage(bufOld, sx, 0, sw, sh, dx, 0, dw, dh);
+    }
+
+    // 오른쪽 빈 영역은 배경만 보이게 두고, 경계에 페더만
+    const boundaryX = cssW - shift;
+    const featherW = Math.min(54, Math.max(20, anim.shiftPx * 0.25));
+    drawEdgeFeather(ctx, boundaryX, featherW, cssH, "toRight");
 
     if (t >= 1){
       anim.mode = "reveal";
@@ -1008,55 +1093,76 @@ function tickAnim(){
       anim.revealW = 0;
     }
   }
- else if (anim.mode === "reveal"){
-  const t = Math.min(1, (now - anim.start) / anim.durReveal);
-  const k = easeInOutQuint(t);
-  anim.revealW = anim.shiftPx * k;
+  else if (anim.mode === "reveal"){
+    const t = Math.min(1, (now - anim.start) / anim.durReveal);
+    const k = easeInOutQuint(t);
+    anim.revealW = anim.shiftPx * k;
 
-  const gapX = cssW - anim.shiftPx;
-  const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
+    const gapX = cssW - anim.shiftPx;
+    const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
 
-  // 1) old를 최종 shift 상태로 고정
-  drawTintedImage(
-    ctx,
-    bufOld,
-    0, 0, cssW, cssH,
-    -anim.shiftPx, 0, cssW, cssH,
-    tint
-  );
+    // 왼쪽: old를 최종 shift 상태로 고정 (round로 통일)
+    {
+      const sx = Math.round(anim.shiftPx * dpr);
+      const sw = Math.round((cssW - anim.shiftPx) * dpr);
+      const sh = Math.round(cssH * dpr);
+      const dw = cssW - anim.shiftPx;
 
-  // 2) 오른쪽 gap에 new를 "정상 위치(dx=0)"로 채움
-  if (clipW > 0){
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(gapX, 0, clipW, cssH);
-    ctx.clip();
+      if (sw > 0 && dw > 0){
+        ctx.drawImage(bufOld, sx, 0, sw, sh, 0, 0, dw, cssH);
+      }
+    }
 
-    // 여기 핵심: bufNew는 밀지 않고 그대로 그려야 gap 영역이 정확히 채워집니다.
-    drawTintedImage(
-      ctx,
-      bufNew,
-      0, 0, cssW, cssH,
-      0, 0, cssW, cssH,
-      tint
-    );
+    // 오른쪽: new를 채우되, 경계 오버랩 + 알파 블렌딩으로 이음새 제거
+    if (clipW > 0){
+      const overlap = Math.min(48, Math.max(18, anim.shiftPx * 0.18));
 
-    ctx.restore();
+      const drawX = gapX - overlap;
+      const drawW = clipW + overlap;
+
+      const srcX = Math.round((cssW - anim.shiftPx - overlap) * dpr);
+      const sh2  = Math.round(cssH * dpr);
+
+      const srcX2 = Math.max(0, srcX);
+      const cutLeftPx = (srcX2 - srcX) / dpr;
+      const drawX2 = drawX + cutLeftPx;
+      const drawW2 = drawW - cutLeftPx;
+      const srcW2  = Math.round(drawW2 * dpr);
+
+      if (srcW2 > 0 && drawW2 > 0){
+        ctx.save();
+
+        // 현재 채워져야 하는 영역만 클립
+        ctx.beginPath();
+        ctx.rect(gapX - overlap, 0, clipW + overlap, cssH);
+        ctx.clip();
+
+        // new 슬라이스(오버랩 포함)
+        ctx.drawImage(bufNew, srcX2, 0, srcW2, sh2, drawX2, 0, drawW2, cssH);
+
+        // 오버랩 구간만 그라데이션 알파로 부드럽게(하드 컷 방지)
+        ctx.globalCompositeOperation = "destination-in";
+        const g = ctx.createLinearGradient(gapX - overlap, 0, gapX, 0);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, "rgba(0,0,0,1)");
+        ctx.fillStyle = g;
+        ctx.fillRect(gapX - overlap, 0, overlap, cssH);
+
+        // gapX 이후는 100% 유지
+        ctx.fillStyle = "rgba(0,0,0,1)";
+        ctx.fillRect(gapX, 0, clipW, cssH);
+
+        ctx.restore();
+      }
+    }
+
+    if (t >= 1){
+      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
+      anim.mode = "none";
+    }
   }
-
-  if (t >= 1){
-    const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
-    anim.mode = "none";
-  }
-}
   else{
-    drawTintedImage(
-      ctx,
-      bufOld,
-      0, 0, cssW, cssH,
-      0, 0, cssW, cssH,
-      tint
-    );
+    ctx.drawImage(bufOld, 0, 0, cssW, cssH);
   }
 
   if (isAnimating()){
@@ -1109,22 +1215,25 @@ function renderMonitor(){
   ensureBufferSize(bufOld, cssW, cssH);
   ensureBufferSize(bufNew, cssW, cssH);
 
+  // 1시간은 항상 화면 폭에 들어가도록: startMs/endMs는 buildSeriesFor1h가 책임
   if (!Number.isFinite(lastRenderedEndMs)){
     const series0 = buildSeriesFor1h(cachedEntries, latestMs);
-    drawSmoothAreaTo(bufOld, series0);
-    drawSmoothAreaTo(bufNew, series0);
+    drawSmoothAreaTo(bufOld, series0, nextFill);
+    drawSmoothAreaTo(bufNew, series0, nextFill);
     lastRenderedEndMs = latestMs;
+
     requestAnimationFrame(tickAnim);
     return;
   }
 
   if (latestMs > lastRenderedEndMs){
     const seriesNew = buildSeriesFor1h(cachedEntries, latestMs);
-    drawSmoothAreaTo(bufNew, seriesNew);
+    drawSmoothAreaTo(bufNew, seriesNew, nextFill);
 
     const dt = latestMs - lastRenderedEndMs;
     const windowMs = 60 * 60 * 1000;
 
+    // 한시간이 화면폭 전체이므로 dt/windowMs 비율만큼 픽셀 이동
     const rawShift = cssW * (dt / windowMs);
     const shiftPx = Math.max(10, Math.min(cssW * 0.40, rawShift));
 
@@ -1194,9 +1303,9 @@ function pickNearestEntry(entries, atDate){
   let best = null;
   let bestAbs = Infinity;
   for (const e of entries){
-    const t = safeNum(e.date, null);
-    if (!Number.isFinite(t)) continue;
-    const abs = Math.abs(t - at);
+    const tt = safeNum(e.date, null);
+    if (!Number.isFinite(tt)) continue;
+    const abs = Math.abs(tt - at);
     if (abs < bestAbs){ bestAbs = abs; best = e; }
   }
   return best;
@@ -1205,13 +1314,14 @@ function pickLatestEntry(entries){
   if (!Array.isArray(entries) || !entries.length) return null;
   let best = null, bestT = -Infinity;
   for (const e of entries){
-    const t = safeNum(e.date, null);
-    if (!Number.isFinite(t)) continue;
-    if (t > bestT){ bestT = t; best = e; }
+    const tt = safeNum(e.date, null);
+    if (!Number.isFinite(tt)) continue;
+    if (tt > bestT){ bestT = tt; best = e; }
   }
   return best;
 }
 
+/* 선택한 기준시간(atMs)으로 IOB/COB 계산 */
 function calcGetIobCobAt(atMs){
   if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
 
@@ -1276,6 +1386,7 @@ function calcUpdateUI(){
     pill.className = "calcDelta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
   }
 
+  /* 기준시간 기반 IOB/COB 표시 및 차감 */
   const rt = calcGetIobCobAt(atMs);
   document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
   document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
