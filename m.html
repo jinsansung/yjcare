@@ -515,20 +515,34 @@ function rollText(stackId, oldId, newId, prevText, nextText, dir){
   const newEl = document.getElementById(newId);
   if (!stack || !oldEl || !newEl) return prevText;
 
-  if (prevText === null){
-    oldEl.textContent = nextText;
-    newEl.textContent = nextText;
+  const resetTo = (text) => {
     stack.classList.remove("anim-up","anim-down");
+
+    oldEl.textContent = text;
+    newEl.textContent = text;
+
+    // 항상 안전하게 초기화
+    oldEl.style.transition = "none";
+    newEl.style.transition = "none";
+    oldEl.style.opacity = "1";
+    newEl.style.opacity = "0";
+    oldEl.style.transform = "translateY(0)";
+    newEl.style.transform = "translateY(0)";
+
+    // 다음 애니메이션을 위해 transition 복구
+    requestAnimationFrame(() => {
+      oldEl.style.transition = "";
+      newEl.style.transition = "";
+    });
+  };
+
+  // 첫 렌더 또는 값 같음: 애니메이션 없이 확정
+  if (prevText === null || nextText === prevText){
+    resetTo(nextText);
     return nextText;
   }
 
-  if (nextText === prevText){
-    oldEl.textContent = nextText;
-    newEl.textContent = nextText;
-    stack.classList.remove("anim-up","anim-down");
-    return nextText;
-  }
-
+  // 애니메이션 준비
   oldEl.textContent = prevText;
   newEl.textContent = nextText;
 
@@ -543,19 +557,14 @@ function rollText(stackId, oldId, newId, prevText, nextText, dir){
   oldEl.style.opacity = "1";
   oldEl.style.transform = "translateY(0)";
 
-  void stack.offsetWidth;
+  void stack.offsetWidth; // reflow
 
   newEl.style.transition = "";
   oldEl.style.transition = "";
   stack.classList.add(dir === "up" ? "anim-up" : "anim-down");
 
   window.setTimeout(() => {
-    stack.classList.remove("anim-up","anim-down");
-    oldEl.textContent = nextText;
-    oldEl.style.opacity = "1";
-    oldEl.style.transform = "translateY(0)";
-    newEl.style.opacity = "0";
-    newEl.style.transform = "translateY(0)";
+    resetTo(nextText);
   }, 460);
 
   return nextText;
