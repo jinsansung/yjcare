@@ -10,28 +10,26 @@
       --bg:#000000;
       --text:#f4f4f7;
       --muted:rgba(244,244,247,0.70);
-      --hair:rgba(255,255,255,0.10);
     }
     *{box-sizing:border-box}
-    html,body{height:100%; width:100%; margin:0; background:var(--bg); overflow:hidden;}
+    html,body{height:100%; width:100%; margin:0; padding:0; overflow:hidden; background:var(--bg);}
     body{
       font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
       -webkit-font-smoothing:antialiased;
       text-rendering:optimizeLegibility;
       touch-action: manipulation;
+      overscroll-behavior: none;
     }
 
-    /* iOS 주소창/툴바로 인한 하단 블랙/여백 최소화 */
     .stage{
       position:fixed;
       inset:0;
       width:100vw;
-      height:100dvh;
+      height:100vh;
       overflow:hidden;
-      background: #000;
+      background:#000;
     }
 
-    /* 배경 그래프 캔버스 */
     #bgCanvas{
       position:absolute;
       inset:0;
@@ -40,7 +38,6 @@
       display:block;
     }
 
-    /* 중앙 오버레이 */
     .overlay{
       position:absolute;
       inset:0;
@@ -82,7 +79,7 @@
       font-size: 88px;
       font-weight: 850;
       letter-spacing: -1px;
-      color: var(--text); /* 요구: 플랫/화살표 모두 화이트 */
+      color: var(--text);
       min-width: 96px;
       text-align:center;
       line-height: 1;
@@ -107,7 +104,6 @@
       font-weight: 800;
     }
 
-    /* 숫자/화살표 “슈루룩” 애니메이션: 사라짐 방지용 단일 엘리먼트 애니메이션 */
     .rollUp{ animation: rollUp 420ms cubic-bezier(.22,.61,.36,1) both; }
     .rollDown{ animation: rollDown 420ms cubic-bezier(.22,.61,.36,1) both; }
     @keyframes rollUp{
@@ -119,7 +115,6 @@
       100%{ transform: translateY(0) rotateX(0); opacity: 1; }
     }
 
-    /* 초소형 모니터 대응 */
     @media (max-width: 520px){
       .bg{ font-size: 156px; }
       .arrow{ font-size: 74px; min-width: 84px; }
@@ -155,11 +150,9 @@
   </div>
 
 <script>
-/* ===== 설정 ===== */
 const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션
 
-/* ===== 유틸 ===== */
 function withToken(url){
   if (!NS_TOKEN) return url;
   const hasQ = url.includes("?");
@@ -182,8 +175,6 @@ function sortByTimeDesc(arr){
   return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
 }
 function pad2(n){ return String(n).padStart(2, "0"); }
-
-/* 경과시간 mm:ss (1시간 이상이면 h:mm:ss) */
 function formatAge(ms){
   if (!Number.isFinite(ms) || ms < 0) return "--:--";
   const s = Math.floor(ms / 1000);
@@ -194,11 +185,10 @@ function formatAge(ms){
   return `${mm}:${pad2(ss)}`;
 }
 
-/* ===== direction -> 화살표(화이트 고정) ===== */
 function directionToArrow(dirRaw){
   const dir = (dirRaw || "").toString().trim().toLowerCase();
   if (!dir || dir === "none" || dir === "flat" || dir === "notcomputable" || dir === "rateoutofrange"){
-    return "—"; // 요구: dash가 짧아 보이면 em dash
+    return "—";
   }
   const map = {
     "doubleup": "↑↑",
@@ -214,7 +204,6 @@ function directionToArrow(dirRaw){
   return "—";
 }
 
-/* ===== 프로파일(필요 최소: dia, carbs_hr) ===== */
 function pickProfileRecord(profileArr){
   if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
   return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
@@ -238,7 +227,7 @@ function getDiaAndCarbsHr(profileJson){
   return { dia, carbsHr };
 }
 
-/* ===== IOB smootherstep (계산기 코드 그대로) ===== */
+/* 계산기 코드에서 가져온 IOB/COB */
 function insulinRemainingFractionSmootherstep(dtMs, diaHours){
   const diaMs = diaHours * 3600 * 1000;
   if (diaMs <= 0) return 0;
@@ -263,8 +252,6 @@ function computeIOB(treatments, atMs, diaHours){
   }
   return iob;
 }
-
-/* ===== COB carbs_hr 기반 선형 decay (계산기 코드 그대로) ===== */
 function computeCOB(treatments, atMs, carbsHr){
   let cob = 0;
   for (const tr of treatments){
@@ -280,9 +267,9 @@ function computeCOB(treatments, atMs, carbsHr){
   return cob;
 }
 
-/* ===== 차트 컬러: “현재 혈당” 구간에 따른 단일 컬러 ===== */
+/* 현재 혈당 구간 단일 컬러 */
 function colorForBg(bg){
-  if (!Number.isFinite(bg)) return "rgba(255,255,255,0.14)";
+  if (!Number.isFinite(bg)) return "rgba(255,255,255,0.10)";
   if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
   if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
   if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
@@ -290,8 +277,6 @@ function colorForBg(bg){
   if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
   return "rgba(255,92,92,0.28)";
 }
-
-/* 색상 보간(차트 배경 컬러 변화 부드럽게) */
 function parseRgba(str){
   const m = str.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/i);
   if (!m) return {r:0,g:0,b:0,a:0};
@@ -307,7 +292,7 @@ function lerpColor(c1, c2, t){
   return `rgba(${r},${g},${bb},${aa})`;
 }
 
-/* ===== 부드러운 곡선(캔버스) Catmull-Rom -> Bezier ===== */
+/* 부드러운 곡선 area: 패딩 0, 먼저 전체를 fillColor로 채워서 검은 공백 제거 */
 function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
   const ctx = canvas.getContext("2d", { alpha: true });
 
@@ -322,13 +307,23 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
   ctx.clearRect(0,0,cssW,cssH);
-  ctx.fillStyle = "#000";
+
+  /* 핵심: 화면 전체를 현재 컬러로 먼저 채움 (슬라이드 중 빈 구간도 같은 컬러로 보이게) */
+  ctx.fillStyle = fillColor;
   ctx.fillRect(0,0,cssW,cssH);
 
-  if (!series || series.length < 2) return;
+  if (!series || series.length < 2) {
+    const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
+    grad0.addColorStop(0, "rgba(0,0,0,0.70)");
+    grad0.addColorStop(0.35, "rgba(0,0,0,0.38)");
+    grad0.addColorStop(1, "rgba(0,0,0,0.12)");
+    ctx.fillStyle = grad0;
+    ctx.fillRect(0,0,cssW,cssH);
+    return;
+  }
 
-  const padX = 10;
-  const padY = 10;
+  const padX = 0;
+  const padY = 0;
   const w = cssW - padX*2;
   const h = cssH - padY*2;
 
@@ -344,11 +339,7 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
 
   const pts = series.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(padX, padY, w, h);
-  ctx.clip();
-
+  /* Catmull-Rom -> Bezier */
   const tension = 0.5;
   const cp = (p0, p1, p2, p3) => {
     const d1 = { x: (p2.x - p0.x) * tension, y: (p2.y - p0.y) * tension };
@@ -359,7 +350,8 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
     };
   };
 
-  // Area fill (단일 컬러)
+  /* area는 fillColor보다 조금 진하게 */
+  ctx.globalAlpha = 0.95;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i=0;i<pts.length-1;i++){
@@ -370,93 +362,36 @@ function drawSmoothArea(canvas, series, fillColor, xOffsetPx){
     const { c1, c2 } = cp(p0,p1,p2,p3);
     ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
   }
-  ctx.lineTo(pts[pts.length-1].x, padY + h);
-  ctx.lineTo(pts[0].x, padY + h);
+  ctx.lineTo(pts[pts.length-1].x, cssH);
+  ctx.lineTo(pts[0].x, cssH);
   ctx.closePath();
   ctx.fillStyle = fillColor;
-  ctx.globalAlpha = 1;
   ctx.fill();
 
-  ctx.restore();
+  ctx.globalAlpha = 1;
 
-  // iOS 툴바 영역까지 톤이 자연스럽게 보이도록 전체 그라데이션
+  /* 상단 어둡게: 텍스트 대비 */
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
-  grad.addColorStop(0, "rgba(0,0,0,0.74)");
-  grad.addColorStop(0.35, "rgba(0,0,0,0.40)");
-  grad.addColorStop(1, "rgba(0,0,0,0.10)");
+  grad.addColorStop(0, "rgba(0,0,0,0.70)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.38)");
+  grad.addColorStop(1, "rgba(0,0,0,0.12)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,cssW,cssH);
 }
 
-/* ===== 데이터/애니메이션 상태 ===== */
-let cachedProfile = null;
-let cachedEntries = null;
-let cachedTreatments = null;
-
-let latestEntryMsForAge = null;
-
-let lastBgValue = null;
-let lastArrowValue = null;
-
-let prevGraphEndMs = null;
-let lastSeriesForAnim = null;
-
-let graphAnim = { active:false, from:0, to:0, start:0, dur:700 };
-let colorAnim = { active:false, from:"rgba(255,255,255,0.14)", to:"rgba(255,255,255,0.14)", start:0, dur:650 };
-
-function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
-
-function startGraphSlide(series, dx){
-  lastSeriesForAnim = series;
-  graphAnim.active = true;
-  graphAnim.from = 0;
-  graphAnim.to = dx;
-  graphAnim.start = performance.now();
-}
-function startColorTransition(next){
-  if (!colorAnim.to){
-    colorAnim.from = next;
-    colorAnim.to = next;
-    colorAnim.active = false;
-    return;
-  }
-  if (next === colorAnim.to) return;
-  colorAnim.active = true;
-  colorAnim.from = colorAnim.to;
-  colorAnim.to = next;
-  colorAnim.start = performance.now();
-}
-
-function currentFillColor(){
-  if (!colorAnim.active) return colorAnim.to;
-  const now = performance.now();
-  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
-  const k = easeOutCubic(t);
-  const c = lerpColor(colorAnim.from, colorAnim.to, k);
-  if (t >= 1) colorAnim.active = false;
-  return c;
-}
-
-/* 텍스트 애니메이션(사라짐 방지: 클래스만 토글하고 최종 텍스트 고정) */
+/* 텍스트 애니메이션 */
 function animateText(el, nextText, dir){
   if (!el) return;
   const prev = el.textContent;
   if (prev === nextText) return;
-
   el.textContent = nextText;
-
-  el.classList.remove("rollUp", "rollDown");
+  el.classList.remove("rollUp","rollDown");
   void el.offsetWidth;
-
-  if (dir === "down") el.classList.add("rollDown");
-  else el.classList.add("rollUp");
-
-  window.setTimeout(() => {
-    el.classList.remove("rollUp", "rollDown");
-  }, 480);
+  el.classList.add(dir === "down" ? "rollDown" : "rollUp");
+  window.setTimeout(() => el.classList.remove("rollUp","rollDown"), 480);
 }
 
-/* ===== 리사이즈: iOS visualViewport 대응 ===== */
+/* 리사이즈 */
 function resizeStage(){
   const stage = document.getElementById("stage");
   const canvas = document.getElementById("bgCanvas");
@@ -472,7 +407,75 @@ function resizeStage(){
   canvas._cssH = h;
 }
 
-/* ===== 데이터 로드/렌더 ===== */
+let cachedProfile = null;
+let cachedEntries = null;
+let cachedTreatments = null;
+
+let latestEntryMsForAge = null;
+let lastBgValue = null;
+
+let prevGraphEndMs = null;
+let lastSeriesForAnim = null;
+
+let graphAnim = { active:false, from:0, to:0, start:0, dur:700 };
+let colorAnim = { active:false, from:"rgba(255,255,255,0.10)", to:"rgba(255,255,255,0.10)", start:0, dur:650 };
+
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+function startColorTransition(next){
+  if (!colorAnim.to){
+    colorAnim.from = next;
+    colorAnim.to = next;
+    colorAnim.active = false;
+    return;
+  }
+  if (next === colorAnim.to) return;
+  colorAnim.active = true;
+  colorAnim.from = colorAnim.to;
+  colorAnim.to = next;
+  colorAnim.start = performance.now();
+}
+function currentFillColor(){
+  if (!colorAnim.active) return colorAnim.to;
+  const now = performance.now();
+  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
+  const k = easeOutCubic(t);
+  const c = lerpColor(colorAnim.from, colorAnim.to, k);
+  if (t >= 1) colorAnim.active = false;
+  return c;
+}
+
+function startGraphSlide(series, dx){
+  lastSeriesForAnim = series;
+  graphAnim.active = true;
+  graphAnim.from = 0;
+  graphAnim.to = dx;
+  graphAnim.start = performance.now();
+}
+
+function tickAnim(){
+  if (!lastSeriesForAnim) return;
+  const canvas = document.getElementById("bgCanvas");
+
+  let x = 0;
+  if (graphAnim.active){
+    const now = performance.now();
+    const t = Math.min(1, (now - graphAnim.start) / graphAnim.dur);
+    const k = easeOutCubic(t);
+    x = graphAnim.from + (graphAnim.to - graphAnim.from) * k;
+    if (t >= 1){
+      graphAnim.active = false;
+      x = 0;
+    }
+  }
+
+  drawSmoothArea(canvas, lastSeriesForAnim, currentFillColor(), x);
+
+  if (graphAnim.active || colorAnim.active){
+    requestAnimationFrame(tickAnim);
+  }
+}
+
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
@@ -521,21 +524,17 @@ function renderNow(){
 
   const arrow = directionToArrow(latest?.direction);
 
-  // 방향(혈당 상승/하강) 기준으로 롤 방향
   let dir = "up";
   if (lastBgValue !== null && Number.isFinite(latestV)){
     dir = latestV > lastBgValue ? "up" : (latestV < lastBgValue ? "down" : "up");
   }
 
-  // 숫자/화살표 표시
   const nextBgText = (latestV !== null) ? String(Math.round(latestV)) : "--";
   animateText(bgEl, nextBgText, dir);
   animateText(arrowEl, arrow, dir);
 
   lastBgValue = Number.isFinite(latestV) ? latestV : lastBgValue;
-  lastArrowValue = arrow;
 
-  // age / change
   ageEl.textContent = formatAge(Date.now() - latestMs);
   if (delta === null){
     chgEl.textContent = "--";
@@ -544,7 +543,6 @@ function renderNow(){
     chgEl.textContent = sign + String(Math.round(delta));
   }
 
-  // IOB/COB
   const { dia, carbsHr } = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
 
   const iob = (Number.isFinite(dia) && dia > 0 && cachedTreatments)
@@ -558,21 +556,17 @@ function renderNow(){
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
-  // 차트: 단일 컬러(현재 혈당)
   const endT = latestMs;
   const series = buildSeriesFor1h(cachedEntries, endT);
   lastSeriesForAnim = series;
 
-  // 컬러 트랜지션(현재 혈당 기준)
-  const nextFill = colorForBg(latestV);
-  startColorTransition(nextFill);
+  startColorTransition(colorForBg(latestV));
 
-  // 그래프 슬라이드(새 데이터가 전진한 만큼 왼쪽으로)
   let dx = 0;
   if (Number.isFinite(prevGraphEndMs) && Number.isFinite(endT) && endT > prevGraphEndMs){
     const dt = endT - prevGraphEndMs;
     const windowMs = 60 * 60 * 1000;
-    const w = (canvas._cssW || window.innerWidth) - 20; // padX*2
+    const w = (canvas._cssW || window.innerWidth);
     dx = -w * (dt / windowMs);
   }
   prevGraphEndMs = endT;
@@ -583,29 +577,8 @@ function renderNow(){
     startGraphSlide(series, dx);
     requestAnimationFrame(tickAnim);
   }
-}
 
-function tickAnim(){
-  if (!lastSeriesForAnim) return;
-
-  const canvas = document.getElementById("bgCanvas");
-
-  let x = 0;
-  if (graphAnim.active){
-    const now = performance.now();
-    const t = Math.min(1, (now - graphAnim.start) / graphAnim.dur);
-    const k = easeOutCubic(t);
-    x = graphAnim.from + (graphAnim.to - graphAnim.from) * k;
-    if (t >= 1){
-      graphAnim.active = false;
-      x = 0;
-    }
-  }
-
-  const fill = currentFillColor();
-  drawSmoothArea(canvas, lastSeriesForAnim, fill, x);
-
-  if (graphAnim.active || colorAnim.active){
+  if (colorAnim.active && !graphAnim.active){
     requestAnimationFrame(tickAnim);
   }
 }
@@ -617,7 +590,6 @@ async function refresh(){
   try{
     await loadData();
     renderNow();
-    if (colorAnim.active) requestAnimationFrame(tickAnim);
   }catch(e){
     console.warn("monitor refresh failed", e);
   }finally{
@@ -629,10 +601,8 @@ async function refresh(){
   resizeStage();
   refresh();
 
-  // 데이터: 30초마다
   setInterval(refresh, 30 * 1000);
 
-  // 경과시간: 1초마다
   setInterval(() => {
     const ageEl = document.getElementById("ageTxt");
     if (!ageEl) return;
@@ -643,11 +613,11 @@ async function refresh(){
     }
   }, 1000);
 
-  // 리사이즈 대응
   window.addEventListener("resize", () => { resizeStage(); try{ renderNow(); }catch(_){ } });
+
   if (window.visualViewport){
     window.visualViewport.addEventListener("resize", () => { resizeStage(); try{ renderNow(); }catch(_){ } });
-    window.visualViewport.addEventListener("scroll", () => { resizeStage(); }); // iOS 툴바 변화 대응
+    window.visualViewport.addEventListener("scroll", () => { resizeStage(); });
   }
 })();
 </script>
