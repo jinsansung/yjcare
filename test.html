@@ -1020,11 +1020,14 @@ function tickAnim(){
 
   const fill = currentFillColor();
   const bgFill = darkenRgba(fill, BG_DARK_MIX);
+
+  // 배경색은 stage(바디) 쪽에만 적용
   applyStageColor(bgFill);
 
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = bgFill;
-  ctx.fillRect(0, 0, cssW, cssH);
+  // 아래 두 줄이 차트를 “안 보이게” 만드는 주범이라 삭제
+  // ctx.globalAlpha = 1;
+  // ctx.fillStyle = bgFill;
+  // ctx.fillRect(0, 0, cssW, cssH);
 
   const now = performance.now();
 
