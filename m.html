@@ -396,23 +396,82 @@ function currentFillColor(){
    그래프(1시간 창)
 ========================= */
 function buildSeriesFor1h(entries, endMs){
-  const startMs = endMs - 60*60*1000;
-  return entries
-    .filter(e => {
-      const t = safeNum(e.date, null);
-      const v = getSgv(e);
-      return Number.isFinite(t) && v !== null && t >= startMs && t <= endMs;
-    })
-    .sort((a,b)=>safeNum(a.date,0)-safeNum(b.date,0))
-    .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }));
-}
+  const windowMs = 60*60*1000;
+  const startMs = endMs - windowMs;
 
+  // 1) 윈도우 주변 데이터(시작 이전 1개 포함) 뽑기
+  const points = (entries || [])
+    .map(e => ({ t: safeNum(e.date, null), v: getSgv(e) }))
+    .filter(p => Number.isFinite(p.t) && p.v !== null)
+    .sort((a,b)=>a.t-b.t);
+
+  if (points.length === 0){
+    return { startMs, endMs, series: [] };
+  }
+
+  // 윈도우 시작 이전의 마지막 값을 앵커로 잡기
+  let anchor = null;
+  for (let i=points.length-1;i>=0;i--){
+    if (points[i].t <= startMs){ anchor = points[i]; break; }
+  }
+  // 시작 이후 첫 값
+  let firstIn = null;
+  for (let i=0;i<points.length;i++){
+    if (points[i].t >= startMs){ firstIn = points[i]; break; }
+  }
+
+  // anchor가 없으면 시작 이후 첫 값을 anchor로 사용(그래프가 튀지 않게)
+  if (!anchor) anchor = firstIn || points[0];
+
+  // 2) 윈도우 안의 포인트만 추리되, anchor를 앞에 넣어서 보간 기준으로 삼기
+  const inWindow = points.filter(p => p.t >= startMs && p.t <= endMs);
+  const merged = [{ t: startMs, v: anchor.v }, ...inWindow];
+
+  // 3) 일정 간격으로 리샘플(계단/뜀 완화)
+  // 1분 간격. 너무 무겁다면 2분(120000)으로 바꾸셔도 됩니다.
+  const stepMs = 60 * 1000;
+
+  const resampled = [];
+  let j = 0;
+
+  for (let t = startMs; t <= endMs; t += stepMs){
+    // merged에서 t를 둘러싸는 구간 찾기
+    while (j < merged.length-1 && merged[j+1].t < t) j++;
+
+    const p0 = merged[j];
+    const p1 = merged[Math.min(j+1, merged.length-1)];
+
+    // p1이 같은 시간이거나 뒤가 없으면 hold
+    let v;
+    if (!p1 || p1.t === p0.t){
+      v = p0.v;
+    } else if (t >= p1.t){
+      v = p1.v;
+    } else {
+      // 선형 보간
+      const u = (t - p0.t) / (p1.t - p0.t);
+      v = p0.v + (p1.v - p0.v) * u;
+    }
+
+    resampled.push({ t, v });
+  }
+
+  // 4) 끝점 보장(마지막 값 hold)
+  if (resampled.length){
+    resampled[resampled.length-1].t = endMs;
+  }
+
+  return { startMs, endMs, series: resampled };
+}
 /* =========================
    그래프 렌더 (버퍼는 투명, area만)
 ========================= */
 const CHART_AREA_ALPHA = 0.56;
 
-function drawSmoothArea(canvas, series, fillColor){
+function drawSmoothArea(canvas, seriesObj, fillColor){
+  const series = seriesObj?.series || [];
+  const startMs = seriesObj?.startMs;
+  const endMs = seriesObj?.endMs;
   const ctx = canvas.getContext("2d", { alpha: true });
 
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -437,12 +496,8 @@ function drawSmoothArea(canvas, series, fillColor){
     return;
   }
 
-  const minY = 40;
-  const maxY = 401;
-
-  const xs = series.map(p=>p.t);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
+  const minX = startMs;
+  const maxX = endMs;
 
   const w = cssW;
   const h = cssH;
@@ -687,9 +742,9 @@ function renderNow(){
   ensureBufferSize(bufNew, cssW, cssH);
 
   if (!Number.isFinite(lastRenderedEndMs)){
-    const series0 = buildSeriesFor1h(cachedEntries, latestMs);
-    drawSmoothAreaTo(bufOld, series0, nextFill);
-    drawSmoothAreaTo(bufNew, series0, nextFill);
+const series0 = buildSeriesFor1h(cachedEntries, latestMs);
+drawSmoothAreaTo(bufOld, series0, nextFill);
+drawSmoothAreaTo(bufNew, series0, nextFill);
     lastRenderedEndMs = latestMs;
     requestAnimationFrame(tickAnim);
     return;
@@ -703,7 +758,7 @@ function renderNow(){
     const windowMs = 60 * 60 * 1000;
 
     const rawShift = cssW * (dt / windowMs);
-    const shiftPx = Math.max(6, Math.min(cssW * 0.55, rawShift));
+    const shiftPx = Math.max(6, Math.min(cssW * 0.4, rawShift));
 
     slideAnim.active = true;
     slideAnim.from = 0;
