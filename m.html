@@ -19,7 +19,6 @@
       text-rendering:optimizeLegibility;
     }
 
-    /* 배경 그래프 캔버스 */
     #bgCanvas{
       position:fixed;
       inset:0;
@@ -28,7 +27,6 @@
       display:block;
     }
 
-    /* 중앙 오버레이 */
     .overlay{
       position:fixed;
       inset:0;
@@ -66,7 +64,6 @@
       text-align:center;
     }
 
-    /* 공용 롤(슈루룩) 스택 */
     .numStack{
       position:relative;
       display:inline-block;
@@ -139,7 +136,6 @@
       font-weight: 800;
     }
 
-    /* 초소형 모니터 대응 */
     @media (max-width: 520px){
       .bg{ font-size: 156px; }
       .arrow{ font-size: 74px; min-width: 84px; }
@@ -212,7 +208,6 @@ function sortByTimeDesc(arr){
 }
 function pad2(n){ return String(n).padStart(2, "0"); }
 
-/* 경과시간 mm:ss (1시간 이상이면 h:mm:ss) */
 function formatAge(ms){
   if (!Number.isFinite(ms) || ms < 0) return "--:--";
   const s = Math.floor(ms / 1000);
@@ -332,14 +327,12 @@ function lerpColor(c1, c2, t){
   return `rgba(${r},${g},${b2},${a2})`;
 }
 
-/* ===== 배경 그래프 (라인 없이 하부 채움, 구간별 색) ===== */
 const ZONE_COLORS = {
   red:   "rgba(255,92,92,0.34)",
   orange:"rgba(255,170,64,0.32)",
   green: "rgba(110,231,183,0.28)",
   red2:  "rgba(255,92,92,0.34)"
 };
-
 function zoneColor(bg){
   if (bg >= 40 && bg <= 70) return ZONE_COLORS.red;
   if (bg >= 71 && bg <= 90) return ZONE_COLORS.orange;
@@ -363,7 +356,6 @@ function currentZoneColor(nowMs){
   }
   return c;
 }
-
 function startZoneColorTransition(next){
   if (!prevZoneColor){
     prevZoneColor = next;
@@ -377,7 +369,6 @@ function startZoneColorTransition(next){
   zoneAnim.start = performance.now();
 }
 
-/* 슬라이드 포함 draw */
 function drawAreaBackground(canvas, series, xOffsetPx){
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
@@ -441,7 +432,6 @@ function drawAreaBackground(canvas, series, xOffsetPx){
     ctx.fill();
   }
 
-  // 최근값 기준 “전체 톤” 오버레이를 얇게 덮어서 색 변화가 서서히 느껴지게
   ctx.fillStyle = zoneOverlayColor;
   ctx.globalAlpha = 0.22;
   ctx.fillRect(padX, padY, w, h);
@@ -462,17 +452,16 @@ let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
 
-/* 실시간 경과시간용 */
 let latestEntryMsForAge = null;
 
-/* 롤용 상태 */
 let lastBgValue = null;
 let lastArrowText = null;
 
-/* 그래프 슬라이드용 */
 let prevGraphEndMs = null;
 let lastSeriesForAnim = null;
 let graphAnim = { active:false, from:0, to:0, start:0, dur:700 };
+
+let forceReset = true;
 
 function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
 
@@ -502,53 +491,55 @@ function tickGraph(){
 
   drawAreaBackground(document.getElementById("bgCanvas"), lastSeriesForAnim, x);
 
-  // 그래프 슬라이드가 끝나도, zone 컬러 트랜지션이 진행중이면 계속 리프레시
   if (graphAnim.active || zoneAnim.active){
     requestAnimationFrame(tickGraph);
   }
 }
 
-/* 공용 롤 애니메이터: 텍스트 바뀌면 up/down로 굴림 */
+function hardSetStack(stackId, oldId, newId, text){
+  const stack = document.getElementById(stackId);
+  const oldEl = document.getElementById(oldId);
+  const newEl = document.getElementById(newId);
+  if (!stack || !oldEl || !newEl) return;
+
+  stack.classList.remove("anim-up","anim-down");
+
+  oldEl.textContent = text;
+  newEl.textContent = text;
+
+  oldEl.style.transition = "none";
+  newEl.style.transition = "none";
+
+  oldEl.style.opacity = "1";
+  newEl.style.opacity = "0";
+
+  oldEl.style.transform = "translateY(0)";
+  newEl.style.transform = "translateY(0)";
+
+  requestAnimationFrame(() => {
+    oldEl.style.transition = "";
+    newEl.style.transition = "";
+  });
+}
+
 function rollText(stackId, oldId, newId, prevText, nextText, dir){
   const stack = document.getElementById(stackId);
   const oldEl = document.getElementById(oldId);
   const newEl = document.getElementById(newId);
   if (!stack || !oldEl || !newEl) return prevText;
 
-  const resetTo = (text) => {
-    stack.classList.remove("anim-up","anim-down");
+  const resetTo = (text) => hardSetStack(stackId, oldId, newId, text);
 
-    oldEl.textContent = text;
-    newEl.textContent = text;
-
-    // 항상 안전하게 초기화
-    oldEl.style.transition = "none";
-    newEl.style.transition = "none";
-    oldEl.style.opacity = "1";
-    newEl.style.opacity = "0";
-    oldEl.style.transform = "translateY(0)";
-    newEl.style.transform = "translateY(0)";
-
-    // 다음 애니메이션을 위해 transition 복구
-    requestAnimationFrame(() => {
-      oldEl.style.transition = "";
-      newEl.style.transition = "";
-    });
-  };
-
-  // 첫 렌더 또는 값 같음: 애니메이션 없이 확정
   if (prevText === null || nextText === prevText){
     resetTo(nextText);
     return nextText;
   }
 
-  // 애니메이션 준비
   oldEl.textContent = prevText;
   newEl.textContent = nextText;
 
   stack.classList.remove("anim-up","anim-down");
 
-  // 시작 위치 세팅
   newEl.style.transition = "none";
   newEl.style.opacity = "0";
   newEl.style.transform = (dir === "up") ? "translateY(115%)" : "translateY(-115%)";
@@ -557,7 +548,7 @@ function rollText(stackId, oldId, newId, prevText, nextText, dir){
   oldEl.style.opacity = "1";
   oldEl.style.transform = "translateY(0)";
 
-  void stack.offsetWidth; // reflow
+  void stack.offsetWidth;
 
   newEl.style.transition = "";
   oldEl.style.transition = "";
@@ -573,28 +564,38 @@ function rollText(stackId, oldId, newId, prevText, nextText, dir){
 function setRollingBgAndArrow(nextBg, nextArrowText, nextArrowCls){
   const arrowWrap = document.getElementById("arrowWrap");
 
-  // 방향은 혈당 변화 방향으로(요구: 플랫↔화살표 변화도 혈당과 같이 위/아래)
+  const bgText = (nextBg !== null && Number.isFinite(nextBg)) ? String(Math.round(nextBg)) : "--";
+  const arrowText = nextArrowText || "—";
+
+  if (arrowWrap){
+    arrowWrap.className = "arrow " + (nextArrowCls || "flat");
+  }
+
+  if (forceReset){
+    hardSetStack("numStackBg","bgOld","bgNew", bgText);
+    hardSetStack("numStackArrow","arrowOld","arrowNew", arrowText);
+
+    lastBgValue = (nextBg !== null && Number.isFinite(nextBg)) ? nextBg : null;
+    lastArrowText = arrowText;
+    forceReset = false;
+    return;
+  }
+
   let dir = "up";
   if (lastBgValue !== null && Number.isFinite(nextBg)){
     dir = nextBg > lastBgValue ? "up" : (nextBg < lastBgValue ? "down" : "up");
   }
 
-  // BG 롤
   if (nextBg === null || !Number.isFinite(nextBg)){
     lastBgValue = null;
-    rollText("numStackBg","bgOld","bgNew", lastBgValue, "--", "up");
+    rollText("numStackBg","bgOld","bgNew", null, "--", "up");
   } else {
-    const nextBgText = String(Math.round(nextBg));
     const prevBgText = (lastBgValue === null) ? null : String(Math.round(lastBgValue));
-    rollText("numStackBg","bgOld","bgNew", prevBgText, nextBgText, dir);
+    rollText("numStackBg","bgOld","bgNew", prevBgText, bgText, dir);
     lastBgValue = nextBg;
   }
 
-  // Arrow 롤(텍스트가 바뀔 때만)
-  if (arrowWrap){
-    arrowWrap.className = "arrow " + (nextArrowCls || "flat");
-  }
-  lastArrowText = rollText("numStackArrow","arrowOld","arrowNew", lastArrowText, nextArrowText, dir);
+  lastArrowText = rollText("numStackArrow","arrowOld","arrowNew", lastArrowText, arrowText, dir);
 }
 
 async function loadData(){
@@ -621,18 +622,13 @@ function render(){
   const prev = s[1];
 
   const latestV = getSgv(latest);
-
   const { arrow, cls } = directionToArrow(latest?.direction);
   setRollingBgAndArrow(latestV, arrow, cls);
 
   const latestMs = safeNum(latest?.date, null);
   latestEntryMsForAge = latestMs;
 
-  if (latestMs !== null){
-    ageEl.textContent = formatAge(Date.now() - latestMs);
-  } else {
-    ageEl.textContent = "--:--";
-  }
+  ageEl.textContent = (latestMs !== null) ? formatAge(Date.now() - latestMs) : "--:--";
 
   const prevV = getSgv(prev);
   if (latestV !== null && prevV !== null){
@@ -671,18 +667,16 @@ function render(){
 
   lastSeriesForAnim = series;
 
-  // 최신값 기준 zone 컬러 변화는 부드럽게
   const lastV = series.length ? series[series.length - 1].v : null;
   if (Number.isFinite(lastV)){
     startZoneColorTransition(zoneColor(lastV));
   }
 
-  // 그래프 슬라이드: end가 전진한 만큼 왼쪽으로
   let dx = 0;
   if (Number.isFinite(prevGraphEndMs) && Number.isFinite(endT) && endT > prevGraphEndMs){
     const dt = endT - prevGraphEndMs;
     const windowMs = 60 * 60 * 1000;
-    const w = window.innerWidth - 20; // padX*2
+    const w = window.innerWidth - 20;
     dx = -w * (dt / windowMs);
   }
   prevGraphEndMs = endT;
@@ -704,6 +698,7 @@ async function refresh(){
   updating = true;
   try{
     await loadData();
+    forceReset = true;   // 핵심: refresh마다 먼저 강제 표시(빈칸 방지)
     render();
   }catch(e){
     console.warn("monitor refresh failed", e);
@@ -715,10 +710,8 @@ async function refresh(){
 (function init(){
   refresh();
 
-  /* 데이터는 30초마다 */
   setInterval(refresh, 30 * 1000);
 
-  /* 경과시간은 1초마다 실시간 갱신 */
   setInterval(() => {
     const ageEl = document.getElementById("ageTxt");
     if (!ageEl) return;
@@ -728,6 +721,13 @@ async function refresh(){
       ageEl.textContent = "--:--";
     }
   }, 1000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden){
+      forceReset = true;
+      refresh();
+    }
+  });
 
   window.addEventListener("resize", () => { try{ render(); }catch(_){ } });
 })();
