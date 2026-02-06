@@ -64,46 +64,6 @@
       text-align:center;
     }
 
-    .numStack{
-      position:relative;
-      display:inline-block;
-      height: 1em;
-      overflow:hidden;
-      width: 100%;
-    }
-    .num{
-      position:absolute;
-      left:0;
-      right:0;
-      text-align:center;
-      will-change: transform, opacity;
-      transform: translateY(0);
-      opacity: 1;
-    }
-    .num.new{ opacity:0; }
-
-    .numStack.anim-up .old{
-      transform: translateY(-115%);
-      opacity:0;
-      transition: transform 420ms cubic-bezier(.22,.61,.36,1), opacity 420ms cubic-bezier(.22,.61,.36,1);
-    }
-    .numStack.anim-up .new{
-      transform: translateY(0);
-      opacity:1;
-      transition: transform 420ms cubic-bezier(.22,.61,.36,1), opacity 420ms cubic-bezier(.22,.61,.36,1);
-    }
-
-    .numStack.anim-down .old{
-      transform: translateY(115%);
-      opacity:0;
-      transition: transform 420ms cubic-bezier(.22,.61,.36,1), opacity 420ms cubic-bezier(.22,.61,.36,1);
-    }
-    .numStack.anim-down .new{
-      transform: translateY(0);
-      opacity:1;
-      transition: transform 420ms cubic-bezier(.22,.61,.36,1), opacity 420ms cubic-bezier(.22,.61,.36,1);
-    }
-
     .arrow{
       font-size: 88px;
       font-weight: 850;
@@ -118,6 +78,37 @@
     .arrow.up{ color: rgba(255,92,92,0.95); }
     .arrow.down{ color: rgba(110,231,183,0.95); }
     .arrow.flat{ color: rgba(244,244,247,0.68); }
+
+    /* 항상 보이는 기본 텍스트 */
+    .rollBase{
+      position:relative;
+      display:inline-block;
+      height:1em;
+      min-height:1em;
+      overflow:visible; /* 기본 텍스트는 절대 숨기지 않음 */
+    }
+    .rollBaseText{
+      display:block;
+      text-align:center;
+      white-space:nowrap;
+    }
+
+    /* 애니메이션 복제 레이어(잠깐만 등장) */
+    .ghost{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      pointer-events:none;
+      will-change: transform, opacity;
+    }
+    .ghostText{
+      display:block;
+      width:100%;
+      text-align:center;
+      white-space:nowrap;
+    }
 
     .subRow{
       display:flex;
@@ -156,17 +147,15 @@
   <div class="overlay">
     <div class="panel">
       <div class="mainRow">
-        <div id="bgTxt" class="bg">
-          <span class="numStack" id="numStackBg">
-            <span id="bgOld" class="num old">--</span>
-            <span id="bgNew" class="num new">--</span>
+        <div class="bg">
+          <span class="rollBase" id="bgRoll">
+            <span class="rollBaseText" id="bgText">--</span>
           </span>
         </div>
 
         <div id="arrowWrap" class="arrow flat">
-          <span class="numStack" id="numStackArrow">
-            <span id="arrowOld" class="num old">—</span>
-            <span id="arrowNew" class="num new">—</span>
+          <span class="rollBase" id="arrowRoll">
+            <span class="rollBaseText" id="arrowText">—</span>
           </span>
         </div>
       </div>
@@ -184,6 +173,9 @@
 const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션
 
+const LS_KEY_BG = "yjcare_monitor_last_bg";
+const LS_KEY_ARROW = "yjcare_monitor_last_arrow";
+
 /* ===== 유틸 ===== */
 function withToken(url){
   if (!NS_TOKEN) return url;
@@ -191,7 +183,7 @@ function withToken(url){
   return url + (hasQ ? "&" : "?") + "token=" + encodeURIComponent(NS_TOKEN);
 }
 async function fetchJson(url){
-  const res = await fetch(url, { method:"GET" });
+  const res = await fetch(url, { method:"GET", cache:"no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -311,65 +303,17 @@ function computeCOB(treatments, atMs, carbsHr){
   return cob;
 }
 
-/* ===== 색상 보간(차트 배경 컬러 변화 부드럽게) ===== */
-function parseRgba(str){
-  const m = str.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/i);
-  if (!m) return {r:0,g:0,b:0,a:0};
-  return { r:+m[1], g:+m[2], b:+m[3], a:+m[4] };
-}
-function lerp(a,b,t){ return a + (b-a)*t; }
-function lerpColor(c1, c2, t){
-  const a = parseRgba(c1), b = parseRgba(c2);
-  const r = Math.round(lerp(a.r,b.r,t));
-  const g = Math.round(lerp(a.g,b.g,t));
-  const b2= Math.round(lerp(a.b,b.b,t));
-  const a2= +lerp(a.a,b.a,t).toFixed(3);
-  return `rgba(${r},${g},${b2},${a2})`;
-}
-
-const ZONE_COLORS = {
-  red:   "rgba(255,92,92,0.34)",
-  orange:"rgba(255,170,64,0.32)",
-  green: "rgba(110,231,183,0.28)",
-  red2:  "rgba(255,92,92,0.34)"
-};
+/* ===== 배경 그래프(원래 코드 유지, 단순 draw) ===== */
 function zoneColor(bg){
-  if (bg >= 40 && bg <= 70) return ZONE_COLORS.red;
-  if (bg >= 71 && bg <= 90) return ZONE_COLORS.orange;
-  if (bg >= 91 && bg <= 200) return ZONE_COLORS.green;
-  if (bg >= 201 && bg <= 240) return ZONE_COLORS.orange;
-  if (bg >= 241 && bg <= 401) return ZONE_COLORS.red2;
+  if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
+  if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
+  if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
+  if (bg >= 201 && bg <= 240) return "rgba(255,170,64,0.32)";
+  if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
   return "rgba(255,92,92,0.28)";
 }
 
-let prevZoneColor = null;
-let zoneAnim = { active:false, from:null, to:null, start:0, dur:600 };
-
-function currentZoneColor(nowMs){
-  if (!zoneAnim.active || !zoneAnim.from || !zoneAnim.to) return prevZoneColor || zoneAnim.to || "rgba(255,92,92,0.28)";
-  const t = Math.min(1, (nowMs - zoneAnim.start) / zoneAnim.dur);
-  const k = 1 - Math.pow(1 - t, 3);
-  const c = lerpColor(zoneAnim.from, zoneAnim.to, k);
-  if (t >= 1){
-    zoneAnim.active = false;
-    prevZoneColor = zoneAnim.to;
-  }
-  return c;
-}
-function startZoneColorTransition(next){
-  if (!prevZoneColor){
-    prevZoneColor = next;
-    zoneAnim.active = false;
-    return;
-  }
-  if (next === prevZoneColor) return;
-  zoneAnim.active = true;
-  zoneAnim.from = prevZoneColor;
-  zoneAnim.to = next;
-  zoneAnim.start = performance.now();
-}
-
-function drawAreaBackground(canvas, series, xOffsetPx){
+function drawAreaBackground(canvas, series){
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const cssW = window.innerWidth;
@@ -399,17 +343,8 @@ function drawAreaBackground(canvas, series, xOffsetPx){
   const minY = 40;
   const maxY = 401;
 
-  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w + (xOffsetPx || 0);
+  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * w;
   const yMap = (v) => padY + (1 - ((v - minY) / (maxY - minY))) * h;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(padX, padY, w, h);
-  ctx.clip();
-
-  const now = performance.now();
-  const fallback = "rgba(255,92,92,0.28)";
-  const zoneOverlayColor = currentZoneColor(now) || fallback;
 
   for (let i=0;i<series.length-1;i++){
     const p0 = series[i];
@@ -432,13 +367,6 @@ function drawAreaBackground(canvas, series, xOffsetPx){
     ctx.fill();
   }
 
-  ctx.fillStyle = zoneOverlayColor;
-  ctx.globalAlpha = 0.22;
-  ctx.fillRect(padX, padY, w, h);
-  ctx.globalAlpha = 1;
-
-  ctx.restore();
-
   const grad = ctx.createLinearGradient(0, 0, 0, cssH);
   grad.addColorStop(0, "rgba(0,0,0,0.76)");
   grad.addColorStop(0.35, "rgba(0,0,0,0.40)");
@@ -447,156 +375,57 @@ function drawAreaBackground(canvas, series, xOffsetPx){
   ctx.fillRect(0,0,cssW,cssH);
 }
 
+/* ===== 롤 애니메이션(기본 텍스트는 항상 남김) ===== */
+function rollSwap(containerEl, baseTextEl, nextText, direction){
+  const prevText = baseTextEl.textContent;
+  if (nextText === prevText) return;
+
+  const ghost = document.createElement("span");
+  ghost.className = "ghost";
+  const ghostText = document.createElement("span");
+  ghostText.className = "ghostText";
+  ghostText.textContent = nextText;
+  ghost.appendChild(ghostText);
+  containerEl.appendChild(ghost);
+
+  const px = Math.max(24, Math.round(containerEl.getBoundingClientRect().height * 1.15));
+  const inFrom = (direction === "down") ? -px : px;
+  const outTo  = (direction === "down") ? px : -px;
+
+  try{
+    baseTextEl.animate(
+      [
+        { transform: "translateY(0)", opacity: 1 },
+        { transform: `translateY(${outTo}px)`, opacity: 0 }
+      ],
+      { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
+    );
+
+    ghost.animate(
+      [
+        { transform: `translateY(${inFrom}px)`, opacity: 0 },
+        { transform: "translateY(0)", opacity: 1 }
+      ],
+      { duration: 420, easing: "cubic-bezier(.22,.61,.36,1)", fill: "forwards" }
+    ).onfinish = () => {
+      baseTextEl.textContent = nextText;
+      baseTextEl.style.transform = "translateY(0)";
+      baseTextEl.style.opacity = "1";
+      ghost.remove();
+    };
+  }catch(_){
+    baseTextEl.textContent = nextText;
+    ghost.remove();
+  }
+}
+
 /* ===== 데이터 로드/렌더 ===== */
 let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
-
 let latestEntryMsForAge = null;
 
-let lastBgValue = null;
-let lastArrowText = null;
-
-let prevGraphEndMs = null;
-let lastSeriesForAnim = null;
-let graphAnim = { active:false, from:0, to:0, start:0, dur:700 };
-
-let forceReset = true;
-
-function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
-
-function startGraphSlide(series, dx){
-  lastSeriesForAnim = series;
-  graphAnim.active = true;
-  graphAnim.from = 0;
-  graphAnim.to = dx;
-  graphAnim.start = performance.now();
-}
-
-function tickGraph(){
-  if (!lastSeriesForAnim) return;
-
-  let x = 0;
-  if (graphAnim.active){
-    const now = performance.now();
-    const t = Math.min(1, (now - graphAnim.start) / graphAnim.dur);
-    const k = easeOutCubic(t);
-    x = graphAnim.from + (graphAnim.to - graphAnim.from) * k;
-
-    if (t >= 1){
-      graphAnim.active = false;
-      x = 0;
-    }
-  }
-
-  drawAreaBackground(document.getElementById("bgCanvas"), lastSeriesForAnim, x);
-
-  if (graphAnim.active || zoneAnim.active){
-    requestAnimationFrame(tickGraph);
-  }
-}
-
-function hardSetStack(stackId, oldId, newId, text){
-  const stack = document.getElementById(stackId);
-  const oldEl = document.getElementById(oldId);
-  const newEl = document.getElementById(newId);
-  if (!stack || !oldEl || !newEl) return;
-
-  stack.classList.remove("anim-up","anim-down");
-
-  oldEl.textContent = text;
-  newEl.textContent = text;
-
-  oldEl.style.transition = "none";
-  newEl.style.transition = "none";
-
-  oldEl.style.opacity = "1";
-  newEl.style.opacity = "0";
-
-  oldEl.style.transform = "translateY(0)";
-  newEl.style.transform = "translateY(0)";
-
-  requestAnimationFrame(() => {
-    oldEl.style.transition = "";
-    newEl.style.transition = "";
-  });
-}
-
-function rollText(stackId, oldId, newId, prevText, nextText, dir){
-  const stack = document.getElementById(stackId);
-  const oldEl = document.getElementById(oldId);
-  const newEl = document.getElementById(newId);
-  if (!stack || !oldEl || !newEl) return prevText;
-
-  const resetTo = (text) => hardSetStack(stackId, oldId, newId, text);
-
-  if (prevText === null || nextText === prevText){
-    resetTo(nextText);
-    return nextText;
-  }
-
-  oldEl.textContent = prevText;
-  newEl.textContent = nextText;
-
-  stack.classList.remove("anim-up","anim-down");
-
-  newEl.style.transition = "none";
-  newEl.style.opacity = "0";
-  newEl.style.transform = (dir === "up") ? "translateY(115%)" : "translateY(-115%)";
-
-  oldEl.style.transition = "none";
-  oldEl.style.opacity = "1";
-  oldEl.style.transform = "translateY(0)";
-
-  void stack.offsetWidth;
-
-  newEl.style.transition = "";
-  oldEl.style.transition = "";
-  stack.classList.add(dir === "up" ? "anim-up" : "anim-down");
-
-  window.setTimeout(() => {
-    resetTo(nextText);
-  }, 460);
-
-  return nextText;
-}
-
-function setRollingBgAndArrow(nextBg, nextArrowText, nextArrowCls){
-  const arrowWrap = document.getElementById("arrowWrap");
-
-  const bgText = (nextBg !== null && Number.isFinite(nextBg)) ? String(Math.round(nextBg)) : "--";
-  const arrowText = nextArrowText || "—";
-
-  if (arrowWrap){
-    arrowWrap.className = "arrow " + (nextArrowCls || "flat");
-  }
-
-  if (forceReset){
-    hardSetStack("numStackBg","bgOld","bgNew", bgText);
-    hardSetStack("numStackArrow","arrowOld","arrowNew", arrowText);
-
-    lastBgValue = (nextBg !== null && Number.isFinite(nextBg)) ? nextBg : null;
-    lastArrowText = arrowText;
-    forceReset = false;
-    return;
-  }
-
-  let dir = "up";
-  if (lastBgValue !== null && Number.isFinite(nextBg)){
-    dir = nextBg > lastBgValue ? "up" : (nextBg < lastBgValue ? "down" : "up");
-  }
-
-  if (nextBg === null || !Number.isFinite(nextBg)){
-    lastBgValue = null;
-    rollText("numStackBg","bgOld","bgNew", null, "--", "up");
-  } else {
-    const prevBgText = (lastBgValue === null) ? null : String(Math.round(lastBgValue));
-    rollText("numStackBg","bgOld","bgNew", prevBgText, bgText, dir);
-    lastBgValue = nextBg;
-  }
-
-  lastArrowText = rollText("numStackArrow","arrowOld","arrowNew", lastArrowText, arrowText, dir);
-}
+let lastBgNum = null;
 
 async function loadData(){
   const base = NS_BASE_URL.replace(/\/+$/,"");
@@ -610,32 +439,70 @@ async function loadData(){
 }
 
 function render(){
+  const bgRoll = document.getElementById("bgRoll");
+  const bgText = document.getElementById("bgText");
+  const arrowRoll = document.getElementById("arrowRoll");
+  const arrowText = document.getElementById("arrowText");
+  const arrowWrap = document.getElementById("arrowWrap");
+
   const ageEl = document.getElementById("ageTxt");
   const chgEl = document.getElementById("chgTxt");
   const iobEl = document.getElementById("iobTxt");
   const cobEl = document.getElementById("cobTxt");
 
-  if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
+  if (!cachedEntries || !Array.isArray(cachedEntries) || cachedEntries.length === 0){
+    const cached = localStorage.getItem(LS_KEY_BG);
+    if (cached) bgText.textContent = cached;
+    return;
+  }
 
   const s = sortByTimeDesc(cachedEntries);
   const latest = s[0];
   const prev = s[1];
 
   const latestV = getSgv(latest);
-  const { arrow, cls } = directionToArrow(latest?.direction);
-  setRollingBgAndArrow(latestV, arrow, cls);
-
   const latestMs = safeNum(latest?.date, null);
-  latestEntryMsForAge = latestMs;
-
-  ageEl.textContent = (latestMs !== null) ? formatAge(Date.now() - latestMs) : "--:--";
 
   const prevV = getSgv(prev);
-  if (latestV !== null && prevV !== null){
-    const d = latestV - prevV;
-    const sign = d > 0 ? "+" : "";
-    chgEl.textContent = sign + String(Math.round(d));
-  } else {
+  const delta = (latestV !== null && prevV !== null) ? (latestV - prevV) : null;
+
+  const nextBgText = (latestV !== null) ? String(Math.round(latestV)) : "--";
+
+  let dir = "up";
+  if (lastBgNum !== null && Number.isFinite(latestV)){
+    dir = latestV > lastBgNum ? "up" : (latestV < lastBgNum ? "down" : "up");
+  }else if (delta !== null){
+    dir = delta >= 0 ? "up" : "down";
+  }
+
+  if (bgText.textContent === "--" && nextBgText !== "--"){
+    bgText.textContent = nextBgText;
+  }else{
+    rollSwap(bgRoll, bgText, nextBgText, dir);
+  }
+
+  if (Number.isFinite(latestV)) lastBgNum = latestV;
+
+  const { arrow, cls } = directionToArrow(latest?.direction);
+  if (arrowWrap) arrowWrap.className = "arrow " + cls;
+
+  if (!arrowText.textContent || arrowText.textContent === "—"){
+    arrowText.textContent = arrow;
+  }else{
+    rollSwap(arrowRoll, arrowText, arrow, dir);
+  }
+
+  if (latestMs !== null){
+    latestEntryMsForAge = latestMs;
+    ageEl.textContent = formatAge(Date.now() - latestMs);
+  }else{
+    ageEl.textContent = "--:--";
+  }
+
+  if (delta !== null){
+    const sign = delta > 0 ? "+" : "";
+    chgEl.textContent = sign + String(Math.round(delta));
+  }else{
     chgEl.textContent = "--";
   }
 
@@ -652,6 +519,9 @@ function render(){
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 
+  localStorage.setItem(LS_KEY_BG, nextBgText);
+  localStorage.setItem(LS_KEY_ARROW, arrow);
+
   const endT = (latestMs !== null) ? latestMs : Date.now();
   const startT = endT - 60*60*1000;
 
@@ -665,31 +535,7 @@ function render(){
     .map(e => ({ t: safeNum(e.date,0), v: getSgv(e) }))
     .filter(p => p.v !== null);
 
-  lastSeriesForAnim = series;
-
-  const lastV = series.length ? series[series.length - 1].v : null;
-  if (Number.isFinite(lastV)){
-    startZoneColorTransition(zoneColor(lastV));
-  }
-
-  let dx = 0;
-  if (Number.isFinite(prevGraphEndMs) && Number.isFinite(endT) && endT > prevGraphEndMs){
-    const dt = endT - prevGraphEndMs;
-    const windowMs = 60 * 60 * 1000;
-    const w = window.innerWidth - 20;
-    dx = -w * (dt / windowMs);
-  }
-  prevGraphEndMs = endT;
-
-  if (Math.abs(dx) < 1){
-    drawAreaBackground(document.getElementById("bgCanvas"), series, 0);
-  } else {
-    startGraphSlide(series, dx);
-  }
-
-  if (graphAnim.active || zoneAnim.active){
-    requestAnimationFrame(tickGraph);
-  }
+  drawAreaBackground(document.getElementById("bgCanvas"), series);
 }
 
 let updating = false;
@@ -698,10 +544,17 @@ async function refresh(){
   updating = true;
   try{
     await loadData();
-    forceReset = true;   // 핵심: refresh마다 먼저 강제 표시(빈칸 방지)
     render();
   }catch(e){
     console.warn("monitor refresh failed", e);
+
+    const bgText = document.getElementById("bgText");
+    const arrowText = document.getElementById("arrowText");
+    const cachedBg = localStorage.getItem(LS_KEY_BG);
+    const cachedArrow = localStorage.getItem(LS_KEY_ARROW);
+
+    if (cachedBg) bgText.textContent = cachedBg;
+    if (cachedArrow) arrowText.textContent = cachedArrow;
   }finally{
     updating = false;
   }
@@ -724,7 +577,6 @@ async function refresh(){
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden){
-      forceReset = true;
       refresh();
     }
   });
