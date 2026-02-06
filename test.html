@@ -1008,46 +1008,47 @@ function tickAnim(){
       anim.revealW = 0;
     }
   }
-  else if (anim.mode === "reveal"){
-    const t = Math.min(1, (now - anim.start) / anim.durReveal);
-    const k = easeInOutQuint(t);
-    anim.revealW = anim.shiftPx * k;
+ else if (anim.mode === "reveal"){
+  const t = Math.min(1, (now - anim.start) / anim.durReveal);
+  const k = easeInOutQuint(t);
+  anim.revealW = anim.shiftPx * k;
 
-    const gapX = cssW - anim.shiftPx;
-    const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
+  const gapX = cssW - anim.shiftPx;
+  const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
 
-    /* 1) old를 최종 shift 상태로 고정 */
+  // 1) old를 최종 shift 상태로 고정
+  drawTintedImage(
+    ctx,
+    bufOld,
+    0, 0, cssW, cssH,
+    -anim.shiftPx, 0, cssW, cssH,
+    tint
+  );
+
+  // 2) 오른쪽 gap에 new를 "정상 위치(dx=0)"로 채움
+  if (clipW > 0){
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(gapX, 0, clipW, cssH);
+    ctx.clip();
+
+    // 여기 핵심: bufNew는 밀지 않고 그대로 그려야 gap 영역이 정확히 채워집니다.
     drawTintedImage(
       ctx,
-      bufOld,
+      bufNew,
       0, 0, cssW, cssH,
-      -anim.shiftPx, 0, cssW, cssH,
+      0, 0, cssW, cssH,
       tint
     );
 
-    /* 2) 오른쪽 gap에 new를 왼쪽에서 오른쪽으로 채움 */
-    if (clipW > 0){
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(gapX, 0, clipW, cssH);
-      ctx.clip();
-
-      drawTintedImage(
-        ctx,
-        bufNew,
-        0, 0, cssW, cssH,
-        -anim.shiftPx, 0, cssW, cssH,
-        tint
-      );
-
-      ctx.restore();
-    }
-
-    if (t >= 1){
-      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
-      anim.mode = "none";
-    }
+    ctx.restore();
   }
+
+  if (t >= 1){
+    const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
+    anim.mode = "none";
+  }
+}
   else{
     drawTintedImage(
       ctx,
