@@ -19,9 +19,7 @@
       --ok:#6ee7b7;
       --manual:#ffd166
     }
-    .big.manual{
-    color: var(--manual);
-    }
+    .big.manual{ color: var(--manual); }
     *{box-sizing:border-box}
     button, .btn, .timeDisplay { touch-action: manipulation; }
     html,body{height:100%; overflow: hidden;}
@@ -68,40 +66,31 @@
     }
     .delta.up{ color: var(--danger); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
     .delta.down{ color: var(--ok); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
-    .topRight{
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
-
-.iconBtn{
-  height: 32px;              /* delta와 같은 높이(현재 delta 패딩 기준) */
-  min-width: 32px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--hair);
-  background: rgba(255,255,255,0.03);
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.iconBtn:active{
-  background: rgba(255,255,255,0.06);
-}
-
-/* 큰 혈당 편집용 input */
-.bgEditInput{
-  width: 5ch;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: var(--text);
-  font: inherit;              /* .big 스타일 그대로 */
-  text-align: left;
-}
+    .topRight{ display:flex; gap:8px; align-items:center; }
+    .iconBtn{
+      height: 32px;
+      min-width: 32px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--hair);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .iconBtn:active{ background: rgba(255,255,255,0.06); }
+    .bgEditInput{
+      width: 5ch;
+      background: transparent;
+      border: 0;
+      outline: none;
+      color: var(--text);
+      font: inherit;
+      text-align: left;
+    }
     .miniLine{
       display:flex; gap:12px; flex-wrap:wrap;
       color: var(--muted);
@@ -195,9 +184,9 @@
     }
     .field input{
       min-width:0;
-      flex:0 1 7ch;          /* 핵심: 줄어들 수 있게 */
+      flex:0 1 7ch;
       max-width: 10ch;
-      width:auto;             /* 고정폭 제거 */
+      width:auto;
       background:transparent;
       border:none;
       outline:none;
@@ -231,8 +220,6 @@
   </style>
 
   <script>
-    // 업데이트 자동 반영(홈화면 웹앱 캐시 우회)
-    // 배포할 때 version.json의 v만 바꾸면 다음 실행 시 자동으로 최신으로 이동합니다.
     (async () => {
       try {
         const res = await fetch("/version.json", { cache: "no-store" });
@@ -250,11 +237,9 @@
         if (data?.v && !prev) localStorage.setItem(key, data.v);
       } catch (_) {}
     })();
-
-
-    
   </script>
 </head>
+
 <body>
   <div class="wrap">
     <div class="stack">
@@ -327,21 +312,17 @@
 const NS_BASE_URL = "https://ns.whalesound.net";
 const NS_TOKEN = ""; // 옵션: 필요 시 토큰 문자열만 입력
 
+// Nightscout와 수치 맞추기용(검산 기반)
+// COB: carbs_hr=20 + delay 약 23분
+const COB_DELAY_MIN = 23;
+
+// IOB: bilinear activity 모델에서 peak 약 94분이 Nightscout와 일치(검산 기반)
+const IOB_PEAK_MIN = 94;
+
 /* ===== 유틸 ===== */
-
-
 let manualBg = null;
+function setManualBg(n){ manualBg = Number.isFinite(n) ? n : null; }
 
-function setManualBg(n){
-  manualBg = Number.isFinite(n) ? n : null;
-}
-
-
-
-
-
-
-  
 const $ = (id) => document.getElementById(id);
 function pad2(n){ return String(n).padStart(2, "0"); }
 function toLocalInputValue(d){
@@ -416,47 +397,79 @@ function getProfileAt(profileJson, atDate){
   return { ic, isf, dia, carbsHr };
 }
 
-/* ===== IOB smootherstep decay ===== */
-function insulinRemainingFractionSmootherstep(dtMs, diaHours){
-  const diaMs = diaHours * 3600 * 1000;
-  if (diaMs <= 0) return 0;
-  const u = clamp01(dtMs / diaMs);
-  const u2 = u*u;
-  const u3 = u2*u;
-  const f = u3 * (10 - 15*u + 6*u2);
-  return 1 - f;
+/* ===== IOB (Nightscout-like) : bilinear activity ===== */
+function insulinRemainingFractionBilinear(dtMs, diaHours, peakMinutes){
+  const td = diaHours * 60;
+  if (!Number.isFinite(td) || td <= 0) return 0;
+
+  const t = dtMs / (60 * 1000);
+  if (t <= 0) return 1;
+  if (t >= td) return 0;
+
+  const tp = Math.min(Math.max(peakMinutes, 1), td - 1);
+  const h = 2 / td; // triangle height s.t. total area = 1
+
+  let used;
+  if (t <= tp){
+    used = (h / (2 * tp)) * t * t;
+  } else {
+    const usedToTp = h * tp / 2;
+    const usedAfter =
+      (h / (td - tp)) *
+      ((td * t - (t * t) / 2) - (td * tp - (tp * tp) / 2));
+    used = usedToTp + usedAfter;
+  }
+
+  const usedClamped = clamp01(used);
+  return 1 - usedClamped;
 }
-function computeIOB(treatments, atDate, diaHours){
+function computeIOB(treatments, atDate, diaHours, peakMinutes){
   const at = atDate.getTime();
   let iob = 0;
   for (const tr of treatments){
     const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
     if (!Number.isFinite(tMs)) continue;
+
     const insulin = safeNum(tr.insulin, null);
     if (insulin === null || insulin <= 0) continue;
+
     const dt = at - tMs;
     if (dt < 0) continue;
-    const frac = insulinRemainingFractionSmootherstep(dt, diaHours);
+
+    const frac = insulinRemainingFractionBilinear(dt, diaHours, peakMinutes);
     if (frac <= 0) continue;
+
     iob += insulin * frac;
   }
   return iob;
 }
 
-/* ===== COB carbs_hr 기반 선형 decay ===== */
-function computeCOB(treatments, atDate, carbsHr){
+/* ===== COB (Nightscout-like) : delay + linear decay by carbs_hr ===== */
+function computeCOB(treatments, atDate, carbsHr, carbDelayMin){
   const at = atDate.getTime();
+  const delayMs = carbDelayMin * 60 * 1000;
   let cob = 0;
+
   for (const tr of treatments){
     const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
     if (!Number.isFinite(tMs)) continue;
+
     const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
     if (carbs === null || carbs <= 0) continue;
-    const dtH = (at - tMs) / (3600 * 1000);
-    if (dtH < 0) continue;
+
+    const dtMs = at - tMs - delayMs;
+
+    // 지연 구간: 아직 흡수 시작 전으로 보고 전량 유지
+    if (dtMs <= 0){
+      cob += carbs;
+      continue;
+    }
+
+    const dtH = dtMs / (3600 * 1000);
     const remain = carbs - carbsHr * dtH;
     if (remain > 0) cob += remain;
   }
+
   return cob;
 }
 
@@ -564,25 +577,25 @@ function updateUI(){
   const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
 
   const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
-const effectiveBg = (manualBg !== null) ? manualBg : nowSgv;
+  const effectiveBg = (manualBg !== null) ? manualBg : nowSgv;
 
-// 최상단 표시(수동 우선)
-const bgEl = $("bgBig");
-bgEl.textContent = (effectiveBg !== null) ? String(Math.round(effectiveBg)) : "--";
+  // 최상단 표시(수동 우선)
+  const bgEl = $("bgBig");
+  bgEl.textContent = (effectiveBg !== null) ? String(Math.round(effectiveBg)) : "--";
 
-// 수동일 때 색상/버튼 토글
-const editBtn = $("editBgBtn");
-if (manualBg !== null){
-  bgEl.classList.add("manual");
-  editBtn.textContent = "↻";               // 되돌리기 아이콘(원하면 "되돌" 텍스트로 바꿔도 됨)
-  editBtn.setAttribute("aria-label", "되돌리기");
-  editBtn.dataset.mode = "revert";
-} else {
-  bgEl.classList.remove("manual");
-  editBtn.textContent = "✎";                // 수정 아이콘
-  editBtn.setAttribute("aria-label", "혈당 수정");
-  editBtn.dataset.mode = "edit";
-}
+  // 수동일 때 색상/버튼 토글
+  const editBtn = $("editBgBtn");
+  if (manualBg !== null){
+    bgEl.classList.add("manual");
+    editBtn.textContent = "↻";
+    editBtn.setAttribute("aria-label", "되돌리기");
+    editBtn.dataset.mode = "revert";
+  } else {
+    bgEl.classList.remove("manual");
+    editBtn.textContent = "✎";
+    editBtn.setAttribute("aria-label", "혈당 수정");
+    editBtn.dataset.mode = "edit";
+  }
 
   let delta = null;
   if (Array.isArray(cachedEntries) && cachedEntries.length >= 2){
@@ -619,8 +632,14 @@ if (manualBg !== null){
 
   drawChart($("chart"), series);
 
-  const iob = (Number.isFinite(prof.dia) && prof.dia > 0) ? computeIOB(cachedTreatments, atDate, prof.dia) : null;
-  const cob = (Number.isFinite(prof.carbsHr) && prof.carbsHr > 0) ? computeCOB(cachedTreatments, atDate, prof.carbsHr) : null;
+  // IOB/COB (Nightscout-like)
+  const iob = (Number.isFinite(prof.dia) && prof.dia > 0)
+    ? computeIOB(cachedTreatments, atDate, prof.dia, IOB_PEAK_MIN)
+    : null;
+
+  const cob = (Number.isFinite(prof.carbsHr) && prof.carbsHr > 0)
+    ? computeCOB(cachedTreatments, atDate, prof.carbsHr, COB_DELAY_MIN)
+    : null;
 
   $("iobTxt").textContent = (iob !== null) ? iob.toFixed(2) : "--";
   $("cobTxt").textContent = (cob !== null) ? cob.toFixed(1) : "--";
@@ -630,12 +649,13 @@ if (manualBg !== null){
 
   const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
   const corrRaw =
-  (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
-    ? ((effectiveBg - target) / prof.isf)
-    : null;
+    (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
+      ? ((effectiveBg - target) / prof.isf)
+      : null;
   const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
 
   const iobSub = (iob !== null) ? iob : 0;
+
   let total = 0;
   if (mealIns !== null) total += mealIns;
   if (corrIns !== null) total += corrIns;
@@ -671,8 +691,6 @@ function bumpMinutes(mins){
 
 /* ===== 초기화 ===== */
 (function init(){
-
-  
   const now = new Date();
   $("atTime").value = toLocalInputValue(now);
   $("timeLabel").textContent = formatKST(now);
@@ -695,73 +713,52 @@ function bumpMinutes(mins){
     });
   });
 
+  function beginBgEdit(){
+    const el = $("bgBig");
+    const current = manualBg !== null ? manualBg : Number(el.textContent);
+    if (el.querySelector("input")) return;
 
+    const input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.className = "bgEditInput";
+    input.value = Number.isFinite(current) ? String(Math.round(current)) : "";
+    input.placeholder = "--";
 
-function beginBgEdit(){
-  const el = $("bgBig");
-  const current = manualBg !== null ? manualBg : Number(el.textContent);
+    el.textContent = "";
+    el.appendChild(input);
+    input.focus();
+    input.select();
 
-  // 이미 input이면 중복 방지
-  if (el.querySelector("input")) return;
+    const commit = () => {
+      const n = Number(input.value);
+      if (input.value.trim() === "") setManualBg(null);
+      else if (Number.isFinite(n) && n > 0) setManualBg(n);
+      updateUI();
+    };
 
-  const input = document.createElement("input");
-  input.type = "number";
-  input.inputMode = "numeric";
-  input.className = "bgEditInput";
-  input.value = Number.isFinite(current) ? String(Math.round(current)) : "";
-  input.placeholder = "--";
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { input.blur(); }
+      if (e.key === "Escape") { updateUI(); }
+    });
 
-  // 기존 텍스트 비우고 input 삽입
-  el.textContent = "";
-  el.appendChild(input);
-  input.focus();
-  input.select();
-
-const commit = () => {
-  const n = Number(input.value);
-  if (input.value.trim() === "") setManualBg(null);      // 빈 값이면 자동으로 복귀
-  else if (Number.isFinite(n) && n > 0) setManualBg(n);  // 수동 적용
-  updateUI();
-};
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { input.blur(); }
-    if (e.key === "Escape") { saveManualBg(manualBg); updateUI(); }
-  });
-
-  input.addEventListener("blur", commit);
-}
-
-const editBtn = $("editBgBtn");
-
-const onEditBtn = (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-
-  // 수동혈당이면: 버튼은 무조건 되돌리기
-  if (manualBg !== null) {
-    setManualBg(null);
-    updateUI();
-    return;
+    input.addEventListener("blur", commit);
   }
 
-  // 자동혈당이면: 편집 시작
-  beginBgEdit();
-};
+  const editBtn = $("editBgBtn");
+  const onEditBtn = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (manualBg !== null) {
+      setManualBg(null);
+      updateUI();
+      return;
+    }
+    beginBgEdit();
+  };
+  editBtn.addEventListener("pointerdown", onEditBtn);
+  $("bgBig").addEventListener("click", beginBgEdit);
 
-// iOS에서 click 누락/지연 방지를 위해 pointerdown 우선
-editBtn.addEventListener("pointerdown", onEditBtn);
-
-// 큰 숫자 자체를 탭해도 수정되게 하고 싶으면(선택)
-$("bgBig").addEventListener("click", beginBgEdit);
-
-
-
-
-
-
-
-  
   $("atTime").addEventListener("change", updateUI);
   $("carbsIn").addEventListener("input", updateUI);
   $("targetIn").addEventListener("input", updateUI);
