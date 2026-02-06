@@ -1,1 +1,1588 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="YJCARE">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="color-scheme" content="dark" />
+  <title>YJCARE</title>
 
+  <script>
+    (async () => {
+      try {
+        const res = await fetch("/version.json", { cache: "no-store" });
+        const data = await res.json();
+        const key = "yj_app_version";
+        const prev = localStorage.getItem(key);
+
+        if (data?.v && prev && prev !== data.v) {
+          localStorage.setItem(key, data.v);
+          const u = new URL(location.href);
+          u.searchParams.set("_v", data.v);
+          location.replace(u.toString());
+          return;
+        }
+        if (data?.v && !prev) localStorage.setItem(key, data.v);
+      } catch (_) {}
+    })();
+  </script>
+
+  <style>
+    :root{
+      --bg:#000000;
+      --text:#f4f4f7;
+      --muted:rgba(244,244,247,0.70);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; width:100%; margin:0; padding:0; overflow:hidden; background:var(--bg);}
+    body{
+      font-family:-apple-system, system-ui, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+      touch-action: manipulation;
+      overscroll-behavior: none;
+    }
+
+    .stage{
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+      overflow:hidden;
+      background:#000;
+    }
+
+    #bgCanvas{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      display:block;
+    }
+
+    .overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      pointer-events:none;
+    }
+    .panel{
+      width:100%;
+      max-width:900px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      text-align:center;
+    }
+
+    .mainRow{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:18px;
+      width:100%;
+    }
+
+    .bg{
+      font-size:192px;
+      line-height:0.92;
+      font-weight:850;
+      letter-spacing:-2.2px;
+      color:var(--text);
+      text-align:center;
+    }
+
+    .arrow{
+      font-size:88px;
+      font-weight:850;
+      letter-spacing:-1px;
+      color:var(--text);
+      min-width:96px;
+      text-align:center;
+      line-height:1;
+      white-space:nowrap;
+      transform: translateY(2px);
+    }
+
+    .subRow{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:22px;
+      flex-wrap:wrap;
+      color:var(--muted);
+      font-size:24px;
+      font-weight:700;
+      letter-spacing:0.2px;
+      line-height:1.25;
+    }
+    .subRow span strong{
+      color:var(--text);
+      font-weight:800;
+    }
+
+    .rollUp{ animation: rollUp 420ms cubic-bezier(.22,.61,.36,1) both; }
+    .rollDown{ animation: rollDown 420ms cubic-bezier(.22,.61,.36,1) both; }
+    @keyframes rollUp{
+      0%{ transform: translateY(18%) rotateX(18deg); opacity: 0; }
+      100%{ transform: translateY(0) rotateX(0); opacity: 1; }
+    }
+    @keyframes rollDown{
+      0%{ transform: translateY(-18%) rotateX(-18deg); opacity: 0; }
+      100%{ transform: translateY(0) rotateX(0); opacity: 1; }
+    }
+
+    @media (max-width: 520px){
+      .bg{ font-size:156px; }
+      .arrow{ font-size:74px; min-width:84px; }
+      .subRow{ font-size:20px; gap:16px; }
+      .panel{ gap:8px; }
+    }
+    @media (max-height: 240px){
+      .bg{ font-size:148px; }
+      .arrow{ font-size:68px; }
+      .subRow{ font-size:18px; gap:14px; }
+      .panel{ gap:6px; }
+    }
+
+    /* ===== 계산기 모달 (스코프) ===== */
+    #calcModal{
+      position:fixed;
+      inset:0;
+      display:none;
+      z-index:9999;
+    }
+    #calcModal.isOpen{ display:block; }
+
+    #calcBackdrop{
+      position:absolute;
+      inset:0;
+      background: rgba(0,0,0,0.58);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    #calcSheet{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+    }
+
+    #calcModal .calcWrap{
+      width: min(520px, 100%);
+      max-height: min(92vh, 860px);
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 18px;
+    }
+
+    #calcModal .calcStack{ display:flex; flex-direction:column; gap:12px; }
+    #calcModal .calcCard{
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    #calcModal .calcRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
+    #calcModal .calcSub{ color: rgba(244,244,247,0.62); font-size:12px; letter-spacing:0.2px; }
+
+    #calcModal .calcBig{
+      font-size:56px;
+      line-height:1;
+      font-weight:750;
+      letter-spacing:-1.2px;
+      color: rgba(244,244,247,1);
+    }
+    #calcModal .calcBig.manual{ color: rgba(255,209,102,1); }
+
+    #calcModal .calcDelta{
+      font-size:16px;
+      font-weight:650;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      color: rgba(244,244,247,0.62);
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    #calcModal .calcDelta.up{ color: rgba(255,92,92,1); border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.10); }
+    #calcModal .calcDelta.down{ color: rgba(110,231,183,1); border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.10); }
+
+    #calcModal .calcTopRight{ display:flex; gap:8px; align-items:center; }
+    #calcModal .calcIconBtn{
+      height:32px;
+      min-width:32px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      color: rgba(244,244,247,0.62);
+      font-size:16px;
+      font-weight:700;
+      line-height:1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #calcModal .calcIconBtn:active{ background: rgba(255,255,255,0.06); }
+
+    #calcModal .calcBgEditInput{
+      width:5ch;
+      background: transparent;
+      border:0;
+      outline:none;
+      color: rgba(244,244,247,1);
+      font: inherit;
+      text-align:left;
+    }
+
+    #calcModal .calcMiniLine{
+      display:flex; gap:12px; flex-wrap:wrap;
+      color: rgba(244,244,247,0.62);
+      font-size:13px;
+      align-items:center;
+      margin-top:8px;
+    }
+    #calcModal .calcMiniLine strong{ color: rgba(244,244,247,1); font-weight:650; letter-spacing:0.2px; }
+
+    #calcModal canvas.calcChart{
+      width:100%;
+      height:140px;
+      display:block;
+      border-radius:14px;
+      background: rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.10);
+      margin-top:12px;
+    }
+
+    #calcModal .calcTimeDisplay{
+      width:100%;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      color: rgba(244,244,247,1);
+      font-weight:650;
+      letter-spacing:0.2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+      min-width:0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #calcModal .calcTimeDisplay > div{ min-width:0; }
+    #calcModal .calcTimeDisplay span{ color: rgba(244,244,247,0.62); font-weight:600; font-size:12px; flex:0 0 auto; }
+
+    #calcModal .calcBtnRow{
+      display:flex;
+      gap:0;
+      margin-top:10px;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.02);
+    }
+    #calcModal .calcBtn{
+      flex:1;
+      border:0;
+      border-right:1px solid rgba(255,255,255,0.10);
+      background: transparent;
+      color: rgba(244,244,247,1);
+      padding:10px 8px;
+      font-size:12px;
+      font-weight:650;
+      min-height:40px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      white-space:nowrap;
+    }
+    #calcModal .calcBtn:last-child{ border-right:0; }
+    #calcModal .calcBtn:active{ background: rgba(255,255,255,0.06); }
+
+    #calcModal .calcInputs{
+      display:flex;
+      gap:10px;
+      align-items:stretch;
+      margin-top:12px;
+      min-width:0;
+    }
+    #calcModal .calcField{
+      flex:1 1 0;
+      min-width:0;
+      background: rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:14px;
+      padding:10px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:44px;
+    }
+    #calcModal .calcField label{
+      color: rgba(244,244,247,0.62);
+      font-size:12px;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    #calcModal .calcField input{
+      min-width:0;
+      flex:0 1 7ch;
+      max-width:10ch;
+      width:auto;
+      background:transparent;
+      border:none;
+      outline:none;
+      color: rgba(244,244,247,1);
+      font-size:16px;
+      text-align:right;
+      font-weight:650;
+    }
+    #calcModal .calcField input::-webkit-outer-spin-button,
+    #calcModal .calcField input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+    #calcModal .calcField input[type=number]{ -moz-appearance:textfield; }
+
+    #calcModal .calcDoseBig{
+      font-size:44px;
+      line-height:1.05;
+      font-weight:780;
+      letter-spacing:-0.8px;
+      color: rgba(244,244,247,1);
+    }
+    #calcModal .calcDoseUnit{ font-size:16px; font-weight:650; color: rgba(244,244,247,0.62); margin-left:6px; }
+    #calcModal .calcDivider{ height:1px; background: rgba(255,255,255,0.10); margin: 10px 0 8px; opacity:0.8; }
+    #calcModal .calcDoseBreak{
+      color: rgba(244,244,247,0.62);
+      font-size:12px;
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    #calcModal .calcDoseBreak strong{ color: rgba(244,244,247,1); font-weight:650; }
+
+    #calcModal .calcHidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
+
+    #calcModal .calcCloseBtn{
+      flex:0 0 auto;
+      min-width: 54px;
+      text-align:center;
+    }
+
+    #calcModal .calcHeaderLine{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 10px;
+    }
+    #calcModal .calcHeaderTitle{
+      font-size: 14px;
+      font-weight: 750;
+      letter-spacing: 0.2px;
+      color: rgba(244,244,247,0.88);
+      user-select:none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="stage" id="stage" aria-label="Monitor">
+    <canvas id="bgCanvas"></canvas>
+
+    <div class="overlay">
+      <div class="panel">
+        <div class="mainRow">
+          <div id="bgTxt" class="bg">--</div>
+          <div id="arrowTxt" class="arrow">—</div>
+        </div>
+
+        <div class="subRow">
+          <span><strong id="ageTxt">--:--</strong> (<strong id="chgTxt">--</strong>)</span>
+          <span>IOB <strong id="iobTxt">--</strong>U</span>
+          <span>COB <strong id="cobTxt">--</strong>g</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 계산기 모달 -->
+  <div id="calcModal" aria-hidden="true">
+    <div id="calcBackdrop"></div>
+    <div id="calcSheet" role="dialog" aria-modal="true" aria-label="Calculator">
+      <div class="calcWrap">
+        <div class="calcStack">
+
+          <div class="calcCard">
+            <div class="calcHeaderLine">
+              <div class="calcHeaderTitle">계산기</div>
+              <button id="calcCloseTop" class="calcIconBtn" type="button" aria-label="닫기">X</button>
+            </div>
+
+            <div class="calcRow" style="align-items:flex-end;">
+              <div id="calc_bgBig" class="calcBig">--</div>
+              <div class="calcTopRight">
+                <div id="calc_deltaPill" class="calcDelta">--</div>
+                <button id="calc_editBgBtn" class="calcIconBtn" type="button" aria-label="혈당 수정">✎</button>
+              </div>
+            </div>
+
+            <div class="calcMiniLine">
+              <span>IOB <strong id="calc_iobTxt">--</strong>U</span>
+              <span>COB <strong id="calc_cobTxt">--</strong>g</span>
+            </div>
+
+            <canvas id="calc_chart" class="calcChart" width="900" height="280"></canvas>
+          </div>
+
+          <div class="calcCard">
+            <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
+              <div id="calc_timeLabel">--</div>
+              <span>기준시간</span>
+            </div>
+
+            <div class="calcBtnRow" aria-label="기준시간 빠른 변경">
+              <button class="calcBtn" data-calc-reset="1">reset</button>
+              <button class="calcBtn" data-calc-add="5">+5분</button>
+              <button class="calcBtn" data-calc-add="10">+10분</button>
+              <button class="calcBtn" data-calc-add="30">+30분</button>
+              <button id="calcCloseBtn" class="calcBtn calcCloseBtn" type="button" aria-label="닫기">X</button>
+            </div>
+
+            <input id="calc_atTime" class="calcHidden" type="datetime-local" />
+
+            <div class="calcInputs">
+              <div class="calcField">
+                <label>탄수(g)</label>
+                <input id="calc_carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
+              </div>
+              <div class="calcField">
+                <label>목표</label>
+                <input id="calc_targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+
+          <div class="calcCard">
+            <div class="calcSub">권장 인슐린</div>
+
+            <div style="margin-top:6px;">
+              <span id="calc_finalIns" class="calcDoseBig">--</span><span class="calcDoseUnit">U</span>
+            </div>
+
+            <div class="calcDivider"></div>
+
+            <div class="calcDoseBreak">
+              <span>식사 <strong id="calc_mealIns">--</strong>U</span>
+              <span>보정 <strong id="calc_corrIns">--</strong>U</span>
+              <span>IOB <strong id="calc_iobSub">--</strong>U</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   Nightscout 연결
+========================= */
+const NS_BASE_URL = "https://ns.whalesound.net";
+const NS_TOKEN = ""; // 옵션
+
+function withToken(url){
+  if (!NS_TOKEN) return url;
+  const hasQ = url.includes("?");
+  return url + (hasQ ? "&" : "?") + "token=" + encodeURIComponent(NS_TOKEN);
+}
+async function fetchJson(url){
+  const res = await fetch(url, { method:"GET", cache:"no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* =========================
+   유틸
+========================= */
+function safeNum(x, fallback=null){
+  const n = Number(x);
+  return Number.isFinite(n) ? n : fallback;
+}
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function getSgv(e){ return safeNum(e?.sgv, null) ?? safeNum(e?.mbg, null); }
+function sortByTimeDesc(arr){ return [...arr].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0)); }
+function pad2(n){ return String(n).padStart(2, "0"); }
+function formatAge(ms){
+  if (!Number.isFinite(ms) || ms < 0) return "--:--";
+  const s = Math.floor(ms / 1000);
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (hh > 0) return `${hh}:${pad2(mm)}:${pad2(ss)}`;
+  return `${mm}:${pad2(ss)}`;
+}
+function directionToArrow(dirRaw){
+  const dir = (dirRaw || "").toString().trim().toLowerCase();
+  if (!dir || dir === "none" || dir === "flat" || dir === "notcomputable" || dir === "rateoutofrange") return "—";
+  const map = {
+    doubleup: "↑↑",
+    singleup: "↑",
+    fortyfiveup: "↗",
+    doubledown: "↓↓",
+    singledown: "↓",
+    fortyfivedown: "↘"
+  };
+  if (map[dir]) return map[dir];
+  const compact = dir.replace(/\s+/g, "");
+  return map[compact] || "—";
+}
+function animateText(el, nextText, dir){
+  if (!el) return;
+  const prev = el.textContent;
+  if (prev === nextText) return;
+  el.textContent = nextText;
+  el.classList.remove("rollUp","rollDown");
+  void el.offsetWidth;
+  el.classList.add(dir === "down" ? "rollDown" : "rollUp");
+  window.setTimeout(() => el.classList.remove("rollUp","rollDown"), 480);
+}
+
+/* =========================
+   easing
+========================= */
+function easeInOutQuint(t){
+  return t < 0.5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2, 5)/2;
+}
+
+/* =========================
+   프로파일에서 dia / carbs_hr 읽기
+========================= */
+function pickProfileRecord(profileArr){
+  if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
+  return [...profileArr].sort((a,b) => (Date.parse(b.created_at||b.startDate||0)||0) - (Date.parse(a.created_at||a.startDate||0)||0))[0];
+}
+function getActiveStore(profileRecord){
+  if (!profileRecord) return null;
+  const store = profileRecord.store || profileRecord;
+  if (!store) return null;
+  const defName = profileRecord.defaultProfile || store.defaultProfile || profileRecord.defaultprofile;
+  if (defName && store[defName]) return store[defName];
+  if (store.Default) return store.Default;
+  const keys = Object.keys(store).filter(k => typeof store[k] === "object");
+  return keys.length ? store[keys[0]] : null;
+}
+function timeToSeconds(t){
+  if (typeof t !== "string") return null;
+  const m = t.match(/^(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Number(m[1])*3600 + Number(m[2])*60;
+}
+function pickScheduleValue(scheduleArr, atDate){
+  if (!Array.isArray(scheduleArr) || scheduleArr.length === 0) return null;
+  const sec = atDate.getHours()*3600 + atDate.getMinutes()*60 + atDate.getSeconds();
+  const norm = scheduleArr
+    .map(x => {
+      const ts = safeNum(x.timeAsSeconds, null);
+      const tsec = (ts !== null) ? ts : timeToSeconds(x.time);
+      return { tsec: (tsec ?? 0), value: safeNum(x.value, null) };
+    })
+    .filter(x => x.value !== null)
+    .sort((a,b) => a.tsec - b.tsec);
+  if (!norm.length) return null;
+  let chosen = norm[0].value;
+  for (const it of norm){ if (it.tsec <= sec) chosen = it.value; else break; }
+  return chosen;
+}
+function getProfileAt(profileJson, atDate){
+  const rec = pickProfileRecord(profileJson);
+  const store = getActiveStore(rec);
+  if (!store) return null;
+  const ic = pickScheduleValue(store.carbratio, atDate);
+  const isf = pickScheduleValue(store.sens, atDate);
+  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
+  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
+  return { ic, isf, dia, carbsHr };
+}
+function getDiaAndCarbsHr(profileJson){
+  const rec = pickProfileRecord(profileJson);
+  const store = getActiveStore(rec);
+  if (!store) return { dia: null, carbsHr: null };
+  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
+  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
+  return { dia, carbsHr };
+}
+
+/* =========================
+   IOB/COB 계산 (모니터 기준과 동일)
+========================= */
+const IOB_PEAK_MIN = 94;
+const COB_DELAY_MIN = 23;
+
+function insulinRemainingFractionBilinear(dtMs, diaHours, peakMinutes){
+  const td = diaHours * 60;
+  if (!Number.isFinite(td) || td <= 0) return 0;
+
+  const t = dtMs / (60 * 1000);
+  if (t <= 0) return 1;
+  if (t >= td) return 0;
+
+  const tp = Math.min(Math.max(peakMinutes, 1), td - 1);
+  const h = 2 / td;
+
+  let used;
+  if (t <= tp){
+    used = (h / (2 * tp)) * t * t;
+  } else {
+    const usedToTp = h * tp / 2;
+    const usedAfter =
+      (h / (td - tp)) *
+      ((td * t - (t * t) / 2) - (td * tp - (tp * tp) / 2));
+    used = usedToTp + usedAfter;
+  }
+  return 1 - clamp01(used);
+}
+function computeIOB(treatments, atMs, diaHours){
+  let iob = 0;
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+
+    const insulin = safeNum(tr.insulin, null);
+    if (!Number.isFinite(insulin) || insulin <= 0) continue;
+
+    const dt = atMs - tMs;
+    if (dt < 0) continue;
+
+    const frac = insulinRemainingFractionBilinear(dt, diaHours, IOB_PEAK_MIN);
+    if (frac <= 0) continue;
+
+    iob += insulin * frac;
+  }
+  return iob;
+}
+function computeCOB(treatments, atMs, carbsHr){
+  const delayMs = COB_DELAY_MIN * 60 * 1000;
+  let cob = 0;
+
+  for (const tr of treatments){
+    const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
+    if (!Number.isFinite(tMs)) continue;
+
+    const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
+    if (!Number.isFinite(carbs) || carbs <= 0) continue;
+
+    const dtMs = atMs - tMs - delayMs;
+    if (dtMs <= 0){
+      cob += carbs;
+      continue;
+    }
+    const dtH = dtMs / (3600 * 1000);
+    const remain = carbs - carbsHr * dtH;
+    if (remain > 0) cob += remain;
+  }
+  return cob;
+}
+
+/* =========================
+   컬러 (모니터)
+========================= */
+function colorForBg(bg){
+  if (!Number.isFinite(bg)) return "rgba(255,255,255,0.10)";
+  if (bg >= 40 && bg <= 70) return "rgba(255,92,92,0.34)";
+  if (bg >= 71 && bg <= 90) return "rgba(255,170,64,0.32)";
+  if (bg >= 91 && bg <= 200) return "rgba(110,231,183,0.28)";
+  if (bg >= 201 && bg <= 240) return "rgba(255,170,64,0.32)";
+  if (bg >= 241 && bg <= 401) return "rgba(255,92,92,0.34)";
+  return "rgba(255,92,92,0.28)";
+}
+function parseRgba(str){
+  const m = str.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/i);
+  if (!m) return {r:0,g:0,b:0,a:0};
+  return { r:+m[1], g:+m[2], b:+m[3], a:+m[4] };
+}
+function lerp(a,b,t){ return a + (b-a)*t; }
+function lerpColor(c1, c2, t){
+  const a = parseRgba(c1), b = parseRgba(c2);
+  const r = Math.round(lerp(a.r,b.r,t));
+  const g = Math.round(lerp(a.g,b.g,t));
+  const bb= Math.round(lerp(a.b,b.b,t));
+  const aa= +lerp(a.a,b.a,t).toFixed(3);
+  return `rgba(${r},${g},${bb},${aa})`;
+}
+const BG_DARK_MIX = 0.62;
+function darkenRgba(rgbaStr, mixToBlack){
+  const c = parseRgba(rgbaStr);
+  const t = clamp01(mixToBlack);
+  const r = Math.round(c.r * (1 - t));
+  const g = Math.round(c.g * (1 - t));
+  const b = Math.round(c.b * (1 - t));
+  return `rgba(${r},${g},${b},1)`;
+}
+function applyStageColor(rgba){
+  const stage = document.getElementById("stage");
+  if (stage) stage.style.background = rgba;
+  document.documentElement.style.background = rgba;
+  document.body.style.background = rgba;
+}
+
+let colorAnim = {
+  active:false,
+  from:"rgba(255,255,255,0.10)",
+  to:"rgba(255,255,255,0.10)",
+  start:0,
+  dur:900
+};
+function startColorTransition(next){
+  if (!colorAnim.to){
+    colorAnim.from = next;
+    colorAnim.to = next;
+    colorAnim.active = false;
+    return;
+  }
+  if (next === colorAnim.to) return;
+  colorAnim.active = true;
+  colorAnim.from = colorAnim.to;
+  colorAnim.to = next;
+  colorAnim.start = performance.now();
+}
+function currentFillColor(){
+  if (!colorAnim.active) return colorAnim.to;
+  const now = performance.now();
+  const t = Math.min(1, (now - colorAnim.start) / colorAnim.dur);
+  const k = easeInOutQuint(t);
+  const c = lerpColor(colorAnim.from, colorAnim.to, k);
+  if (t >= 1) colorAnim.active = false;
+  return c;
+}
+
+/* =========================
+   모니터 그래프 (1시간 area)
+========================= */
+function buildSeriesFor1h(entries, endMs){
+  const windowMs = 60*60*1000;
+  const startMs = endMs - windowMs;
+
+  const points = (entries || [])
+    .map(e => ({ t: safeNum(e.date, null), v: getSgv(e) }))
+    .filter(p => Number.isFinite(p.t) && p.v !== null)
+    .sort((a,b)=>a.t-b.t);
+
+  if (points.length === 0){
+    return { startMs, endMs, series: [] };
+  }
+
+  let anchor = null;
+  for (let i=points.length-1;i>=0;i--){
+    if (points[i].t <= startMs){ anchor = points[i]; break; }
+  }
+  let firstIn = null;
+  for (let i=0;i<points.length;i++){
+    if (points[i].t >= startMs){ firstIn = points[i]; break; }
+  }
+  if (!anchor) anchor = firstIn || points[0];
+
+  const inWindow = points.filter(p => p.t >= startMs && p.t <= endMs);
+  const merged = [{ t: startMs, v: anchor.v }, ...inWindow];
+
+  const stepMs = 60 * 1000;
+  const resampled = [];
+  let j = 0;
+
+  for (let t = startMs; t <= endMs; t += stepMs){
+    while (j < merged.length-1 && merged[j+1].t < t) j++;
+    const p0 = merged[j];
+    const p1 = merged[Math.min(j+1, merged.length-1)];
+
+    let v;
+    if (!p1 || p1.t === p0.t){
+      v = p0.v;
+    } else if (t >= p1.t){
+      v = p1.v;
+    } else {
+      const u = (t - p0.t) / (p1.t - p0.t);
+      v = p0.v + (p1.v - p0.v) * u;
+    }
+    resampled.push({ t, v });
+  }
+
+  if (resampled.length){
+    resampled[resampled.length-1].t = endMs;
+  }
+  return { startMs, endMs, series: resampled };
+}
+
+const CHART_AREA_ALPHA = 0.56;
+
+function drawSmoothArea(canvas, seriesObj, fillColor){
+  const series = seriesObj?.series || [];
+  const startMs = seriesObj?.startMs;
+  const endMs = seriesObj?.endMs;
+  const ctx = canvas.getContext("2d", { alpha: true });
+
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const cssW = canvas._cssW || window.innerWidth;
+  const cssH = canvas._cssH || window.innerHeight;
+
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  ctx.clearRect(0,0,cssW,cssH);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+
+  if (!series || series.length < 2){
+    const grad0 = ctx.createLinearGradient(0, 0, 0, cssH);
+    grad0.addColorStop(0, "rgba(0,0,0,0.42)");
+    grad0.addColorStop(0.35, "rgba(0,0,0,0.22)");
+    grad0.addColorStop(1, "rgba(0,0,0,0.06)");
+    ctx.fillStyle = grad0;
+    ctx.fillRect(0,0,cssW,cssH);
+    return;
+  }
+
+  const minY = 40;
+  const maxY = 401;
+
+  const minX = startMs;
+  const maxX = endMs;
+
+  const w = cssW;
+  const h = cssH;
+
+  const xMap = (t) => ((t - minX) / (maxX - minX)) * w;
+  const yMap = (v) => (1 - ((v - minY) / (maxY - minY))) * h;
+
+  const pts = series.map(p => ({ x: xMap(p.t), y: yMap(p.v) }));
+
+  const tension = 0.5;
+  const cp = (p0, p1, p2, p3) => {
+    const d1 = { x: (p2.x - p0.x) * tension, y: (p2.y - p0.y) * tension };
+    const d2 = { x: (p3.x - p1.x) * tension, y: (p3.y - p1.y) * tension };
+    return {
+      c1: { x: p1.x + d1.x / 6, y: p1.y + d1.y / 6 },
+      c2: { x: p2.x - d2.x / 6, y: p2.y - d2.y / 6 }
+    };
+  };
+
+  ctx.globalAlpha = CHART_AREA_ALPHA;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=0;i<pts.length-1;i++){
+    const p0 = pts[Math.max(0, i-1)];
+    const p1 = pts[i];
+    const p2 = pts[i+1];
+    const p3 = pts[Math.min(pts.length-1, i+2)];
+    const { c1, c2 } = cp(p0,p1,p2,p3);
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+  }
+  ctx.lineTo(pts[pts.length-1].x, cssH);
+  ctx.lineTo(pts[0].x, cssH);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  const grad = ctx.createLinearGradient(0, 0, 0, cssH);
+  grad.addColorStop(0, "rgba(0,0,0,0.52)");
+  grad.addColorStop(0.35, "rgba(0,0,0,0.28)");
+  grad.addColorStop(1, "rgba(0,0,0,0.09)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,cssW,cssH);
+}
+
+/* =========================
+   오프스크린 버퍼 & 애니메이션
+========================= */
+let bufOld = document.createElement("canvas");
+let bufNew = document.createElement("canvas");
+
+function ensureBufferSize(buf, cssW, cssH){
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const w = Math.floor(cssW * dpr);
+  const h = Math.floor(cssH * dpr);
+  if (buf.width !== w || buf.height !== h){
+    buf.width = w;
+    buf.height = h;
+  }
+  buf._cssW = cssW;
+  buf._cssH = cssH;
+}
+function drawSmoothAreaTo(buf, series, fillColor){
+  buf._cssW = buf._cssW ?? window.innerWidth;
+  buf._cssH = buf._cssH ?? window.innerHeight;
+  drawSmoothArea(buf, series, fillColor);
+}
+
+function resizeStage(){
+  const stage = document.getElementById("stage");
+  const canvas = document.getElementById("bgCanvas");
+  const vv = window.visualViewport;
+
+  const w = Math.floor((vv && vv.width) ? vv.width : window.innerWidth);
+  const h = Math.floor((vv && vv.height) ? vv.height : window.innerHeight);
+
+  stage.style.width = w + "px";
+  stage.style.height = h + "px";
+  canvas._cssW = w;
+  canvas._cssH = h;
+}
+
+let cachedProfile = null;
+let cachedEntries = null;
+let cachedTreatments = null;
+
+let latestEntryMsForAge = null;
+let lastBgValue = null;
+let lastRenderedEndMs = null;
+
+let cachedDia = null;
+let cachedCarbsHr = null;
+
+let anim = {
+  mode: "none",
+  start: 0,
+  shiftPx: 0,
+  durShift: 1050,
+  durReveal: 820,
+  revealW: 0
+};
+
+function isAnimating(){
+  return anim.mode !== "none" || colorAnim.active;
+}
+
+async function loadData(){
+  const base = NS_BASE_URL.replace(/\/+$/,"");
+  const profileUrl = withToken(`${base}/api/v1/profile.json`);
+  const entriesUrl  = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
+  const trUrl       = withToken(`${base}/api/v1/treatments.json?count=300`);
+  const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
+  cachedProfile = p;
+  cachedEntries = e;
+  cachedTreatments = t;
+
+  const pe = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
+  cachedDia = pe.dia;
+  cachedCarbsHr = pe.carbsHr;
+}
+
+function drawEdgeFeather(ctx, xStart, width, cssH, direction){
+  const g = ctx.createLinearGradient(
+    direction === "toRight" ? xStart : (xStart + width),
+    0,
+    direction === "toRight" ? (xStart + width) : xStart,
+    0
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = g;
+  ctx.fillRect(xStart, 0, width, cssH);
+}
+
+function tickAnim(){
+  const canvas = document.getElementById("bgCanvas");
+  const ctx = canvas.getContext("2d", { alpha:true });
+
+  const cssW = canvas._cssW || window.innerWidth;
+  const cssH = canvas._cssH || window.innerHeight;
+
+  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const w = Math.floor(cssW * dpr);
+  const h = Math.floor(cssH * dpr);
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+
+  const fill = currentFillColor();
+  const bgFill = darkenRgba(fill, BG_DARK_MIX);
+  applyStageColor(bgFill);
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = bgFill;
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const now = performance.now();
+
+  if (anim.mode === "shift"){
+    const t = Math.min(1, (now - anim.start) / anim.durShift);
+    const k = easeInOutQuint(t);
+    const shift = anim.shiftPx * k;
+
+    ctx.drawImage(bufOld, -shift, 0, cssW, cssH);
+
+    const featherW = Math.min(42, Math.max(18, anim.shiftPx * 0.18));
+    drawEdgeFeather(ctx, cssW - featherW, featherW, cssH, "toRight");
+
+    if (t >= 1){
+      anim.mode = "reveal";
+      anim.start = now;
+      anim.revealW = 0;
+    }
+  }
+  else if (anim.mode === "reveal"){
+    const t = Math.min(1, (now - anim.start) / anim.durReveal);
+    const k = easeInOutQuint(t);
+    anim.revealW = anim.shiftPx * k;
+
+    const gapX = cssW - anim.shiftPx;
+
+    ctx.drawImage(bufOld, -anim.shiftPx, 0, cssW, cssH);
+
+    const clipW = Math.max(0, Math.min(anim.shiftPx, anim.revealW));
+    if (clipW > 0){
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(gapX, 0, clipW, cssH);
+      ctx.clip();
+      ctx.drawImage(bufNew, 0, 0, cssW, cssH);
+      ctx.restore();
+
+      const featherW = Math.min(44, Math.max(18, anim.shiftPx * 0.22));
+      const edgeX = gapX + clipW - featherW;
+      if (edgeX >= gapX){
+        drawEdgeFeather(ctx, edgeX, featherW, cssH, "toRight");
+      }
+    }
+
+    if (t >= 1){
+      const tmp = bufOld; bufOld = bufNew; bufNew = tmp;
+      anim.mode = "none";
+    }
+  }
+  else{
+    ctx.drawImage(bufOld, 0, 0, cssW, cssH);
+  }
+
+  if (isAnimating()){
+    requestAnimationFrame(tickAnim);
+  }
+}
+
+/* =========================
+   모니터 UI 업데이트
+========================= */
+function renderMonitor(){
+  const bgEl = document.getElementById("bgTxt");
+  const arrowEl = document.getElementById("arrowTxt");
+  const ageEl = document.getElementById("ageTxt");
+  const chgEl = document.getElementById("chgTxt");
+
+  if (!Array.isArray(cachedEntries) || cachedEntries.length === 0) return;
+
+  const s = sortByTimeDesc(cachedEntries);
+  const latest = s[0];
+  const prev = s[1];
+
+  const latestV = getSgv(latest);
+  const latestMs = safeNum(latest?.date, null) ?? Date.now();
+  latestEntryMsForAge = latestMs;
+
+  const prevV = getSgv(prev);
+  const delta = (latestV !== null && prevV !== null) ? (latestV - prevV) : null;
+
+  const arrow = directionToArrow(latest?.direction);
+
+  let dir = "up";
+  if (lastBgValue !== null && Number.isFinite(latestV)){
+    dir = latestV > lastBgValue ? "up" : (latestV < lastBgValue ? "down" : "up");
+  }
+
+  animateText(bgEl, (latestV !== null) ? String(Math.round(latestV)) : "--", dir);
+  animateText(arrowEl, arrow, dir);
+  lastBgValue = Number.isFinite(latestV) ? latestV : lastBgValue;
+
+  ageEl.textContent = formatAge(Date.now() - latestMs);
+  chgEl.textContent = (delta === null) ? "--" : ((delta > 0 ? "+" : "") + String(Math.round(delta)));
+
+  const nextFill = colorForBg(latestV);
+  startColorTransition(nextFill);
+
+  const canvas = document.getElementById("bgCanvas");
+  const cssW = canvas._cssW || window.innerWidth;
+  const cssH = canvas._cssH || window.innerHeight;
+  ensureBufferSize(bufOld, cssW, cssH);
+  ensureBufferSize(bufNew, cssW, cssH);
+
+  if (!Number.isFinite(lastRenderedEndMs)){
+    const series0 = buildSeriesFor1h(cachedEntries, latestMs);
+    drawSmoothAreaTo(bufOld, series0, nextFill);
+    drawSmoothAreaTo(bufNew, series0, nextFill);
+    lastRenderedEndMs = latestMs;
+    if (!isAnimating()) requestAnimationFrame(tickAnim);
+    return;
+  }
+
+  if (latestMs > lastRenderedEndMs){
+    const seriesNew = buildSeriesFor1h(cachedEntries, latestMs);
+    drawSmoothAreaTo(bufNew, seriesNew, nextFill);
+
+    const dt = latestMs - lastRenderedEndMs;
+    const windowMs = 60 * 60 * 1000;
+
+    const rawShift = cssW * (dt / windowMs);
+    const shiftPx = Math.max(10, Math.min(cssW * 0.40, rawShift));
+
+    anim.mode = "shift";
+    anim.start = performance.now();
+    anim.shiftPx = shiftPx;
+    anim.revealW = 0;
+
+    lastRenderedEndMs = latestMs;
+    requestAnimationFrame(tickAnim);
+    return;
+  }
+
+  if (!isAnimating()) requestAnimationFrame(tickAnim);
+}
+
+function updateMonitorIobCobRealtime(){
+  const iobEl = document.getElementById("iobTxt");
+  const cobEl = document.getElementById("cobTxt");
+  if (!iobEl || !cobEl) return;
+
+  if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0){
+    iobEl.textContent = "--";
+    cobEl.textContent = "--";
+    return;
+  }
+
+  const nowMs = Date.now();
+
+  const dia = cachedDia;
+  const carbsHr = cachedCarbsHr;
+
+  const iob = (Number.isFinite(dia) && dia > 0)
+    ? computeIOB(cachedTreatments, nowMs, dia)
+    : null;
+
+  const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
+    ? computeCOB(cachedTreatments, nowMs, carbsHr)
+    : null;
+
+  iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
+  cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
+}
+
+/* =========================
+   계산기 (모달) 로직
+========================= */
+let calcManualBg = null;
+function calcSetManualBg(n){ calcManualBg = Number.isFinite(n) ? n : null; }
+
+function toLocalInputValue(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function parseLocalInputToDate(v){
+  if (!v) return new Date();
+  const [dp, tp] = v.split("T");
+  const [y,m,d] = dp.split("-").map(Number);
+  const [hh,mm] = tp.split(":").map(Number);
+  return new Date(y, m-1, d, hh, mm, 0, 0);
+}
+function formatKST(d){
+  return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function pickNearestEntry(entries, atDate){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const at = atDate.getTime();
+  let best = null;
+  let bestAbs = Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    const abs = Math.abs(t - at);
+    if (abs < bestAbs){ bestAbs = abs; best = e; }
+  }
+  return best;
+}
+function pickLatestEntry(entries){
+  if (!Array.isArray(entries) || !entries.length) return null;
+  let best = null, bestT = -Infinity;
+  for (const e of entries){
+    const t = safeNum(e.date, null);
+    if (!Number.isFinite(t)) continue;
+    if (t > bestT){ bestT = t; best = e; }
+  }
+  return best;
+}
+
+function drawCalcChart(canvas, points){
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  const padX = 22, padY = 18;
+  const iw = w - padX*2, ih = h - padY*2;
+
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  for (let i=1;i<=3;i++){
+    const y = padY + (ih/4)*i;
+    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(padX+iw, y); ctx.stroke();
+  }
+
+  if (!points || points.length < 2) return;
+
+  const xs = points.map(p=>p.t);
+  const ys = points.map(p=>p.v);
+
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  let minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (minY === maxY){ minY -= 10; maxY += 10; }
+  const yPad = Math.max(12, (maxY - minY) * 0.12);
+  minY -= yPad; maxY += yPad;
+
+  const xMap = (t) => padX + ((t - minX) / (maxX - minX)) * iw;
+  const yMap = (v) => padY + (1 - (v - minY) / (maxY - minY)) * ih;
+
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(255,255,255,0.92)";
+
+  ctx.beginPath();
+  ctx.moveTo(xMap(points[0].t), yMap(points[0].v));
+  for (let i=1;i<points.length;i++){
+    ctx.lineTo(xMap(points[i].t), yMap(points[i].v));
+  }
+  ctx.stroke();
+
+  const last = points[points.length-1];
+  const lx = xMap(last.t), ly = yMap(last.v);
+
+  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI*2); ctx.fill();
+
+  ctx.font = "600 22px -apple-system, system-ui, Segoe UI, Roboto, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  ctx.fillText(String(Math.round(last.v)), Math.min(lx+14, w-60), Math.max(ly-12, 28));
+}
+
+function calcGetRealtimeIobCob(){
+  if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
+  const nowMs = Date.now();
+  const dia = cachedDia;
+  const carbsHr = cachedCarbsHr;
+
+  const iob = (Number.isFinite(dia) && dia > 0)
+    ? computeIOB(cachedTreatments, nowMs, dia)
+    : null;
+
+  const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
+    ? computeCOB(cachedTreatments, nowMs, carbsHr)
+    : null;
+
+  return { iob, cob };
+}
+
+function calcUpdateUI(){
+  if (!cachedProfile || !cachedEntries) return;
+
+  const atDate = parseLocalInputToDate(document.getElementById("calc_atTime").value);
+  document.getElementById("calc_timeLabel").textContent = formatKST(atDate);
+
+  const prof = getProfileAt(cachedProfile, atDate);
+  if (!prof) return;
+
+  const latest = pickLatestEntry(cachedEntries);
+  const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
+
+  const nowSgv = nearest ? (safeNum(nearest.sgv, null) ?? safeNum(nearest.mbg, null)) : null;
+  const effectiveBg = (calcManualBg !== null) ? calcManualBg : nowSgv;
+
+  const bgEl = document.getElementById("calc_bgBig");
+  bgEl.textContent = (effectiveBg !== null) ? String(Math.round(effectiveBg)) : "--";
+
+  const editBtn = document.getElementById("calc_editBgBtn");
+  if (calcManualBg !== null){
+    bgEl.classList.add("manual");
+    editBtn.textContent = "↻";
+    editBtn.setAttribute("aria-label", "되돌리기");
+  } else {
+    bgEl.classList.remove("manual");
+    editBtn.textContent = "✎";
+    editBtn.setAttribute("aria-label", "혈당 수정");
+  }
+
+  let delta = null;
+  if (Array.isArray(cachedEntries) && cachedEntries.length >= 2){
+    const sorted = [...cachedEntries].sort((a,b)=>safeNum(b.date,0)-safeNum(a.date,0));
+    const a = safeNum(sorted[0]?.sgv, null) ?? safeNum(sorted[0]?.mbg, null);
+    const b = safeNum(sorted[1]?.sgv, null) ?? safeNum(sorted[1]?.mbg, null);
+    if (a !== null && b !== null) delta = a - b;
+  }
+  const pill = document.getElementById("calc_deltaPill");
+  if (delta === null){
+    pill.textContent = "--";
+    pill.className = "calcDelta";
+  } else {
+    const sign = delta > 0 ? "+" : "";
+    pill.textContent = `${sign}${Math.round(delta)}`;
+    pill.className = "calcDelta" + (delta > 0 ? " up" : (delta < 0 ? " down" : ""));
+  }
+
+  const endT = Math.min(atDate.getTime(), safeNum(latest?.date, atDate.getTime()) ?? atDate.getTime());
+  const startT = endT - 60*60*1000;
+
+  const series = (Array.isArray(cachedEntries) ? cachedEntries : [])
+    .filter(e => {
+      const t = safeNum(e.date, null);
+      return Number.isFinite(t) && t >= startT && t <= endT;
+    })
+    .sort((a,b)=>safeNum(a.date,0)-safeNum(b.date,0))
+    .map(e => {
+      const t = safeNum(e.date, 0);
+      const v = safeNum(e.sgv, null) ?? safeNum(e.mbg, null);
+      return (v === null) ? null : { t, v };
+    })
+    .filter(Boolean);
+
+  drawCalcChart(document.getElementById("calc_chart"), series);
+
+  const rt = calcGetRealtimeIobCob();
+  document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
+  document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
+
+  const carbsIn = safeNum(document.getElementById("calc_carbsIn").value, 0) ?? 0;
+  const target = safeNum(document.getElementById("calc_targetIn").value, 180) ?? 180;
+
+  const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
+  const corrRaw =
+    (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
+      ? ((effectiveBg - target) / prof.isf)
+      : null;
+  const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
+
+  const iobSub = (rt.iob !== null) ? rt.iob : 0;
+
+  let total = 0;
+  if (mealIns !== null) total += mealIns;
+  if (corrIns !== null) total += corrIns;
+  total -= iobSub;
+  total = Math.max(0, total);
+
+  document.getElementById("calc_finalIns").textContent = (mealIns === null && corrIns === null) ? "--" : total.toFixed(2);
+  document.getElementById("calc_mealIns").textContent = (mealIns !== null) ? mealIns.toFixed(2) : "--";
+  document.getElementById("calc_corrIns").textContent = (corrIns !== null) ? corrIns.toFixed(2) : "--";
+  document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
+}
+
+function calcBumpMinutes(mins){
+  const input = document.getElementById("calc_atTime");
+  const d = parseLocalInputToDate(input.value);
+  d.setMinutes(d.getMinutes() + mins);
+  input.value = toLocalInputValue(d);
+  calcUpdateUI();
+}
+
+function calcBeginBgEdit(){
+  const el = document.getElementById("calc_bgBig");
+  const current = calcManualBg !== null ? calcManualBg : Number(el.textContent);
+  if (el.querySelector("input")) return;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.inputMode = "numeric";
+  input.className = "calcBgEditInput";
+  input.value = Number.isFinite(current) ? String(Math.round(current)) : "";
+  input.placeholder = "--";
+
+  el.textContent = "";
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const n = Number(input.value);
+    if (input.value.trim() === "") calcSetManualBg(null);
+    else if (Number.isFinite(n) && n > 0) calcSetManualBg(n);
+    calcUpdateUI();
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+    if (e.key === "Escape") calcUpdateUI();
+  });
+  input.addEventListener("blur", commit);
+}
+
+/* =========================
+   모달 열고 닫기
+========================= */
+function openCalcModal(){
+  const modal = document.getElementById("calcModal");
+  modal.classList.add("isOpen");
+  modal.setAttribute("aria-hidden", "false");
+
+  const now = new Date();
+  document.getElementById("calc_atTime").value = toLocalInputValue(now);
+  document.getElementById("calc_timeLabel").textContent = formatKST(now);
+  calcSetManualBg(null);
+  calcUpdateUI();
+}
+
+function closeCalcModal(){
+  const modal = document.getElementById("calcModal");
+  modal.classList.remove("isOpen");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function isCalcOpen(){
+  return document.getElementById("calcModal").classList.contains("isOpen");
+}
+
+/* =========================
+   루프
+========================= */
+let updating = false;
+async function refresh(){
+  if (updating) return;
+  updating = true;
+  try{
+    await loadData();
+    renderMonitor();
+    updateMonitorIobCobRealtime();
+    if (isCalcOpen()) calcUpdateUI();
+  }catch(e){
+    console.warn("monitor refresh failed", e);
+  }finally{
+    updating = false;
+  }
+}
+
+(function init(){
+  resizeStage();
+  refresh();
+
+  setInterval(refresh, 30 * 1000);
+
+  setInterval(() => {
+    const ageEl = document.getElementById("ageTxt");
+    if (ageEl){
+      ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
+    }
+    updateMonitorIobCobRealtime();
+    if (isCalcOpen()){
+      const rt = calcGetRealtimeIobCob();
+      document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
+      document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
+      document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
+    }
+  }, 1000);
+
+  window.addEventListener("resize", () => {
+    resizeStage();
+    try{
+      lastRenderedEndMs = null;
+      anim.mode = "none";
+      renderMonitor();
+    }catch(_){}
+  });
+
+  if (window.visualViewport){
+    window.visualViewport.addEventListener("resize", () => {
+      resizeStage();
+      try{
+        lastRenderedEndMs = null;
+        anim.mode = "none";
+        renderMonitor();
+      }catch(_){}
+    });
+    window.visualViewport.addEventListener("scroll", () => { resizeStage(); });
+  }
+
+  // 모니터 화면 아무 곳 클릭하면 모달 오픈 (모달이 닫혀 있을 때만)
+  const stage = document.getElementById("stage");
+  stage.addEventListener("pointerdown", (e) => {
+    if (isCalcOpen()) return;
+    openCalcModal();
+  });
+
+  // 모달 내부 이벤트 (닫기)
+  document.getElementById("calcBackdrop").addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    closeCalcModal();
+  });
+  document.getElementById("calcCloseBtn").addEventListener("click", closeCalcModal);
+  document.getElementById("calcCloseTop").addEventListener("click", closeCalcModal);
+
+  // 모달 시트 내부 클릭은 배경 이벤트로 전파되지 않게
+  document.getElementById("calcSheet").addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+  });
+
+  // 계산기 입력/버튼
+  document.getElementById("calc_timeDisplay").addEventListener("click", () => {
+    const input = document.getElementById("calc_atTime");
+    if (input.showPicker) input.showPicker();
+    else input.click();
+  });
+
+  document.querySelectorAll(".calcBtn[data-calc-add]").forEach(btn=>{
+    btn.addEventListener("click", () => calcBumpMinutes(Number(btn.dataset.calcAdd)));
+  });
+
+  document.querySelectorAll(".calcBtn[data-calc-reset]").forEach(btn=>{
+    btn.addEventListener("click", () => {
+      const now2 = new Date();
+      document.getElementById("calc_atTime").value = toLocalInputValue(now2);
+      calcUpdateUI();
+    });
+  });
+
+  document.getElementById("calc_atTime").addEventListener("change", calcUpdateUI);
+  document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
+  document.getElementById("calc_targetIn").addEventListener("input", calcUpdateUI);
+
+  // 혈당 수동 입력
+  const editBtn = document.getElementById("calc_editBgBtn");
+  editBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (calcManualBg !== null){
+      calcSetManualBg(null);
+      calcUpdateUI();
+      return;
+    }
+    calcBeginBgEdit();
+  });
+  document.getElementById("calc_bgBig").addEventListener("click", () => {
+    if (calcManualBg === null) calcBeginBgEdit();
+  });
+
+  // ESC로 닫기
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isCalcOpen()){
+      closeCalcModal();
+    }
+  });
+})();
+</script>
+</body>
+</html>
