@@ -148,7 +148,6 @@
       .panel{ gap:6px; }
     }
 
-    /* ===== 계산기 모달 (스코프) ===== */
     #calcSheet{
       position:absolute;
       inset:0;
@@ -399,7 +398,6 @@
     </div>
   </div>
 
-  <!-- 계산기 모달 -->
   <div id="calcModal" aria-hidden="true">
     <div id="calcBackdrop"></div>
     <div id="calcSheet" role="dialog" aria-modal="true" aria-label="Calculator">
@@ -479,7 +477,17 @@
    Nightscout 연결
 ========================= */
 const NS_BASE_URL = "https://ns.whalesound.net";
-const NS_TOKEN = ""; // 옵션
+const NS_TOKEN = "";
+
+/* =========================
+   고정 설정값
+========================= */
+const FIXED_DIA_HOURS = 5;
+const IOB_PEAK_MIN = 110;
+
+const COB_DELAY_MIN = 10;
+const DEFAULT_ABSORPTION_MIN = 180;
+const COB_ABSORPTION_MULTIPLIER = 1.5;
 
 function withToken(url){
   if (!NS_TOKEN) return url;
@@ -539,7 +547,7 @@ function animateText(el, nextText, dir){
 }
 
 /* =========================
-   프로파일에서 dia / carbs_hr 읽기
+   프로파일에서 ICR / ISF만 읽기
 ========================= */
 function pickProfileRecord(profileArr){
   if (!Array.isArray(profileArr) || profileArr.length === 0) return null;
@@ -572,36 +580,37 @@ function pickScheduleValue(scheduleArr, atDate){
     })
     .filter(x => x.value !== null)
     .sort((a,b) => a.tsec - b.tsec);
+
   if (!norm.length) return null;
+
   let chosen = norm[0].value;
-  for (const it of norm){ if (it.tsec <= sec) chosen = it.value; else break; }
+  for (const it of norm){
+    if (it.tsec <= sec) chosen = it.value;
+    else break;
+  }
   return chosen;
 }
 function getProfileAt(profileJson, atDate){
   const rec = pickProfileRecord(profileJson);
   const store = getActiveStore(rec);
   if (!store) return null;
+
   const ic = pickScheduleValue(store.carbratio, atDate);
   const isf = pickScheduleValue(store.sens, atDate);
-  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
-  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
-  return { ic, isf, dia, carbsHr };
+
+  return {
+    ic,
+    isf,
+    dia: FIXED_DIA_HOURS
+  };
 }
-function getDiaAndCarbsHr(profileJson){
-  const rec = pickProfileRecord(profileJson);
-  const store = getActiveStore(rec);
-  if (!store) return { dia: null, carbsHr: null };
-  const dia = safeNum(store.dia, null) ?? safeNum(rec?.dia, null);
-  const carbsHr = safeNum(store.carbs_hr, null) ?? safeNum(store.carbsHr, null);
-  return { dia, carbsHr };
+function getFixedDia(){
+  return FIXED_DIA_HOURS;
 }
 
 /* =========================
    IOB/COB 계산
 ========================= */
-const IOB_PEAK_MIN = 94;
-const COB_DELAY_MIN = 23;
-
 function insulinRemainingFractionBilinear(dtMs, diaHours, peakMinutes){
   const td = diaHours * 60;
   if (!Number.isFinite(td) || td <= 0) return 0;
@@ -623,10 +632,13 @@ function insulinRemainingFractionBilinear(dtMs, diaHours, peakMinutes){
       ((td * t - (t * t) / 2) - (td * tp - (tp * tp) / 2));
     used = usedToTp + usedAfter;
   }
+
   return 1 - clamp01(used);
 }
+
 function computeIOB(treatments, atMs, diaHours){
   let iob = 0;
+
   for (const tr of treatments){
     const tMs = safeNum(tr.date, null) ?? Date.parse(tr.created_at || "");
     if (!Number.isFinite(tMs)) continue;
@@ -642,10 +654,32 @@ function computeIOB(treatments, atMs, diaHours){
 
     iob += insulin * frac;
   }
+
   return iob;
 }
-function computeCOB(treatments, atMs, carbsHr){
-  const delayMs = COB_DELAY_MIN * 60 * 1000;
+
+function getAbsorptionMinutesForTreatment(tr){
+  const direct =
+    safeNum(tr?.absorptionTime, null) ??
+    safeNum(tr?.absorption_time, null) ??
+    safeNum(tr?.absorptionMinutes, null) ??
+    safeNum(tr?.absorption_minutes, null) ??
+    safeNum(tr?.carb_absorption_time, null);
+
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  if (typeof tr?.notes === "string"){
+    const m = tr.notes.match(/abs(?:orption)?\s*[:=]?\s*(\d{2,3})/i);
+    if (m){
+      const parsed = Number(m[1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  return DEFAULT_ABSORPTION_MIN;
+}
+
+function computeCOB(treatments, atMs){
   let cob = 0;
 
   for (const tr of treatments){
@@ -655,15 +689,29 @@ function computeCOB(treatments, atMs, carbsHr){
     const carbs = safeNum(tr.carbs, null) ?? safeNum(tr.carb, null);
     if (!Number.isFinite(carbs) || carbs <= 0) continue;
 
-    const dtMs = atMs - tMs - delayMs;
-    if (dtMs <= 0){
+    const elapsedMin = (atMs - tMs) / 60000;
+    if (elapsedMin <= 0){
       cob += carbs;
       continue;
     }
-    const dtH = dtMs / (3600 * 1000);
-    const remain = carbs - carbsHr * dtH;
-    if (remain > 0) cob += remain;
+
+    const activeElapsedMin = elapsedMin - COB_DELAY_MIN;
+    if (activeElapsedMin <= 0){
+      cob += carbs;
+      continue;
+    }
+
+    const absorptionMin = getAbsorptionMinutesForTreatment(tr);
+    const modeledDurationMin = absorptionMin * COB_ABSORPTION_MULTIPLIER;
+    if (!Number.isFinite(modeledDurationMin) || modeledDurationMin <= 0){
+      cob += carbs;
+      continue;
+    }
+
+    const remainFrac = Math.max(0, 1 - (activeElapsedMin / modeledDurationMin));
+    cob += carbs * remainFrac;
   }
+
   return cob;
 }
 
@@ -684,7 +732,6 @@ function parseRgba(str){
   if (!m) return {r:0,g:0,b:0,a:0};
   return { r:+m[1], g:+m[2], b:+m[3], a:+m[4] };
 }
-function lerp(a,b,t){ return a + (b-a)*t; }
 function darkenRgba(rgbaStr, mixToBlack){
   const c = parseRgba(rgbaStr);
   const tt = clamp01(mixToBlack);
@@ -702,7 +749,7 @@ function applyStageColor(rgba){
 }
 
 /* =========================
-   모니터 그래프 (1시간 area) - dry refresh
+   모니터 그래프
 ========================= */
 const CHART_AREA_ALPHA = 0.56;
 
@@ -759,9 +806,6 @@ function buildSeriesFor1h(entries, endMs){
   return { startMs, endMs, series: resampled };
 }
 
-/* =========================
-   monotone cubic (오버슈트 방지)
-========================= */
 function buildMonotoneTangents(pts){
   const n = pts.length;
   if (n < 2) return [];
@@ -883,7 +927,6 @@ let cachedProfile = null;
 let cachedEntries = null;
 let cachedTreatments = null;
 let cachedDia = null;
-let cachedCarbsHr = null;
 
 let latestEntryMsForAge = null;
 let lastBgValue = null;
@@ -896,14 +939,17 @@ async function loadData(){
   const profileUrl = withToken(`${base}/api/v1/profile.json`);
   const entriesUrl  = withToken(`${base}/api/v1/entries/sgv.json?count=72`);
   const trUrl       = withToken(`${base}/api/v1/treatments.json?count=300`);
-  const [p,e,t] = await Promise.all([fetchJson(profileUrl), fetchJson(entriesUrl), fetchJson(trUrl)]);
+
+  const [p,e,t] = await Promise.all([
+    fetchJson(profileUrl),
+    fetchJson(entriesUrl),
+    fetchJson(trUrl)
+  ]);
+
   cachedProfile = p;
   cachedEntries = e;
   cachedTreatments = t;
-
-  const pe = cachedProfile ? getDiaAndCarbsHr(cachedProfile) : { dia:null, carbsHr:null };
-  cachedDia = pe.dia;
-  cachedCarbsHr = pe.carbsHr;
+  cachedDia = getFixedDia();
 }
 
 /* =========================
@@ -942,12 +988,10 @@ function renderMonitor(){
   ageEl.textContent = formatAge(Date.now() - latestMs);
   chgEl.textContent = (delta === null) ? "--" : ((delta > 0 ? "+" : "") + String(Math.round(delta)));
 
-  // 배경색 적용(드라이)
   const fill = colorForBg(latestV);
   const bgFill = darkenRgba(fill, BG_DARK_MIX);
   applyStageColor(bgFill);
 
-  // 1시간 창을 화면폭에 맞춰 매번 다시 그림(애니메이션 없음)
   const canvas = document.getElementById("bgCanvas");
   const series = buildSeriesFor1h(cachedEntries, latestMs);
   drawSmoothArea(canvas, series, fill);
@@ -966,23 +1010,18 @@ function updateMonitorIobCobRealtime(){
 
   const nowMs = Date.now();
 
-  const dia = cachedDia;
-  const carbsHr = cachedCarbsHr;
-
-  const iob = (Number.isFinite(dia) && dia > 0)
-    ? computeIOB(cachedTreatments, nowMs, dia)
+  const iob = (Number.isFinite(cachedDia) && cachedDia > 0)
+    ? computeIOB(cachedTreatments, nowMs, cachedDia)
     : null;
 
-  const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
-    ? computeCOB(cachedTreatments, nowMs, carbsHr)
-    : null;
+  const cob = computeCOB(cachedTreatments, nowMs);
 
   iobEl.textContent = (iob !== null) ? iob.toFixed(2) : "--";
   cobEl.textContent = (cob !== null) ? cob.toFixed(1) : "--";
 }
 
 /* =========================
-   계산기 (모달) 로직
+   계산기
 ========================= */
 let calcManualBg = null;
 function calcSetManualBg(n){ calcManualBg = Number.isFinite(n) ? n : null; }
@@ -1009,7 +1048,10 @@ function pickNearestEntry(entries, atDate){
     const tt = safeNum(e.date, null);
     if (!Number.isFinite(tt)) continue;
     const abs = Math.abs(tt - at);
-    if (abs < bestAbs){ bestAbs = abs; best = e; }
+    if (abs < bestAbs){
+      bestAbs = abs;
+      best = e;
+    }
   }
   return best;
 }
@@ -1019,23 +1061,23 @@ function pickLatestEntry(entries){
   for (const e of entries){
     const tt = safeNum(e.date, null);
     if (!Number.isFinite(tt)) continue;
-    if (tt > bestT){ bestT = tt; best = e; }
+    if (tt > bestT){
+      bestT = tt;
+      best = e;
+    }
   }
   return best;
 }
 function calcGetIobCobAt(atMs){
-  if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0) return { iob: null, cob: null };
+  if (!Array.isArray(cachedTreatments) || cachedTreatments.length === 0){
+    return { iob: null, cob: null };
+  }
 
-  const dia = cachedDia;
-  const carbsHr = cachedCarbsHr;
-
-  const iob = (Number.isFinite(dia) && dia > 0)
-    ? computeIOB(cachedTreatments, atMs, dia)
+  const iob = (Number.isFinite(cachedDia) && cachedDia > 0)
+    ? computeIOB(cachedTreatments, atMs, cachedDia)
     : null;
 
-  const cob = (Number.isFinite(carbsHr) && carbsHr > 0)
-    ? computeCOB(cachedTreatments, atMs, carbsHr)
-    : null;
+  const cob = computeCOB(cachedTreatments, atMs);
 
   return { iob, cob };
 }
@@ -1077,6 +1119,7 @@ function calcUpdateUI(){
     const b = safeNum(sorted[1]?.sgv, null) ?? safeNum(sorted[1]?.mbg, null);
     if (a !== null && b !== null) delta = a - b;
   }
+
   const pill = document.getElementById("calc_deltaPill");
   if (delta === null){
     pill.textContent = "--";
@@ -1190,8 +1233,6 @@ function resizeStage(){
 
   stage.style.width = w + "px";
   stage.style.height = h + "px";
-
-  // 다음 draw에서 canvas 사이즈 맞춰짐
   canvas.style.width = w + "px";
   canvas.style.height = h + "px";
 }
@@ -1224,8 +1265,11 @@ async function refresh(){
   setInterval(() => {
     const ageEl = document.getElementById("ageTxt");
     if (ageEl){
-      ageEl.textContent = Number.isFinite(latestEntryMsForAge) ? formatAge(Date.now() - latestEntryMsForAge) : "--:--";
+      ageEl.textContent = Number.isFinite(latestEntryMsForAge)
+        ? formatAge(Date.now() - latestEntryMsForAge)
+        : "--:--";
     }
+
     updateMonitorIobCobRealtime();
 
     if (isCalcOpen()){
@@ -1251,7 +1295,7 @@ async function refresh(){
   }
 
   const stage = document.getElementById("stage");
-  stage.addEventListener("pointerdown", (e) => {
+  stage.addEventListener("pointerdown", () => {
     if (isCalcOpen()) return;
     openCalcModal();
   });
@@ -1299,6 +1343,7 @@ async function refresh(){
     }
     calcBeginBgEdit();
   });
+
   document.getElementById("calc_bgBig").addEventListener("click", () => {
     if (calcManualBg === null) calcBeginBgEdit();
   });
