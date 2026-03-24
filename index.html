@@ -359,14 +359,21 @@
     }
     #calcModal .calcDoseBreak strong{ color: rgba(244,244,247,1); font-weight:650; }
 
-#calcModal .calcHidden{
+#calcModal .calcTimeWrap{
+  position:relative;
+}
+
+#calcModal .calcTimeNative{
   position:absolute;
-  width:1px;
-  height:1px;
+  inset:0;
+  width:100%;
+  height:100%;
   opacity:0.01;
-  pointer-events:none;
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
   border:0;
-  padding:0;
+  background:transparent;
 }
     #calcModal .calcHeaderLine{
       display:flex;
@@ -444,25 +451,26 @@
             </div>
           </div>
 
-          <div class="calcCard">
-            <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
-              <div id="calc_timeLabel">--</div>
-              <span>기준시간</span>
-            </div>
+<div class="calcCard">
+  <div class="calcTimeWrap">
+    <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
+      <div id="calc_timeLabel">--</div>
+      <span>기준시간</span>
+    </div>
+    <input id="calc_atTime" class="calcTimeNative" type="datetime-local" />
+  </div>
 
-            <input id="calc_atTime" class="calcHidden" type="datetime-local" />
-
-            <div class="calcInputs">
-              <div class="calcField">
-                <label>탄수(g)</label>
-                <input id="calc_carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
-              </div>
-              <div class="calcField">
-                <label>목표</label>
-                <input id="calc_targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
-              </div>
-            </div>
-          </div>
+  <div class="calcInputs">
+    <div class="calcField">
+      <label>탄수(g)</label>
+      <input id="calc_carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
+    </div>
+    <div class="calcField">
+      <label>목표</label>
+      <input id="calc_targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
+    </div>
+  </div>
+</div>
 
           <div class="calcCard">
             <div class="calcSub">권장 인슐린</div>
@@ -1343,11 +1351,7 @@ async function refresh(){
     e.stopPropagation();
   });
 
-  document.getElementById("calc_timeDisplay").addEventListener("click", () => {
-    const input = document.getElementById("calc_atTime");
-    if (input.showPicker) input.showPicker();
-    else input.click();
-  });
+document.getElementById("calc_atTime").addEventListener("input", calcUpdateUI);
 
 
   document.getElementById("calc_atTime").addEventListener("change", calcUpdateUI);
