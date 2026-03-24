@@ -425,6 +425,19 @@
           </div>
 
           <div class="calcCard">
+            <div class="calcInputs" style="margin-top:0;">
+              <div class="calcField">
+                <label>ICR</label>
+                <input id="calc_icrIn" type="number" min="0" step="0.1" inputmode="decimal" />
+              </div>
+              <div class="calcField">
+                <label>ISF</label>
+                <input id="calc_isfIn" type="number" min="0" step="1" inputmode="decimal" />
+              </div>
+            </div>
+          </div>
+
+          <div class="calcCard">
             <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
               <div id="calc_timeLabel">--</div>
               <span>기준시간</span>
@@ -1024,7 +1037,18 @@ function updateMonitorIobCobRealtime(){
    계산기
 ========================= */
 let calcManualBg = null;
-function calcSetManualBg(n){ calcManualBg = Number.isFinite(n) ? n : null; }
+let calcManualIc = null;
+let calcManualIsf = null;
+
+function calcSetManualBg(n){
+  calcManualBg = Number.isFinite(n) ? n : null;
+}
+function calcSetManualIc(n){
+  calcManualIc = (Number.isFinite(n) && n > 0) ? n : null;
+}
+function calcSetManualIsf(n){
+  calcManualIsf = (Number.isFinite(n) && n > 0) ? n : null;
+}
 
 function toLocalInputValue(d){
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -1092,6 +1116,18 @@ function calcUpdateUI(){
   const prof = getProfileAt(cachedProfile, atDate);
   if (!prof) return;
 
+  const effectiveIc = (calcManualIc !== null) ? calcManualIc : prof.ic;
+  const effectiveIsf = (calcManualIsf !== null) ? calcManualIsf : prof.isf;
+
+  const icrInput = document.getElementById("calc_icrIn");
+  const isfInput = document.getElementById("calc_isfIn");
+
+  const icrDisplay = Number.isFinite(effectiveIc) ? String(effectiveIc) : "";
+  const isfDisplay = Number.isFinite(effectiveIsf) ? String(effectiveIsf) : "";
+
+  if (document.activeElement !== icrInput) icrInput.value = icrDisplay;
+  if (document.activeElement !== isfInput) isfInput.value = isfDisplay;
+
   const latest = pickLatestEntry(cachedEntries);
   const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
 
@@ -1137,10 +1173,10 @@ function calcUpdateUI(){
   const carbsIn = safeNum(document.getElementById("calc_carbsIn").value, 0) ?? 0;
   const target = safeNum(document.getElementById("calc_targetIn").value, 180) ?? 180;
 
-  const mealIns = (Number.isFinite(prof.ic) && prof.ic > 0) ? (carbsIn / prof.ic) : null;
+  const mealIns = (Number.isFinite(effectiveIc) && effectiveIc > 0) ? (carbsIn / effectiveIc) : null;
   const corrRaw =
-    (Number.isFinite(prof.isf) && prof.isf > 0 && effectiveBg !== null)
-      ? ((effectiveBg - target) / prof.isf)
+    (Number.isFinite(effectiveIsf) && effectiveIsf > 0 && effectiveBg !== null)
+      ? ((effectiveBg - target) / effectiveIsf)
       : null;
   const corrIns = (corrRaw !== null) ? Math.max(0, corrRaw) : null;
 
@@ -1208,7 +1244,11 @@ function openCalcModal(){
   const now = new Date();
   document.getElementById("calc_atTime").value = toLocalInputValue(now);
   document.getElementById("calc_timeLabel").textContent = formatKST(now);
+
   calcSetManualBg(null);
+  calcSetManualIc(null);
+  calcSetManualIsf(null);
+
   calcUpdateUI();
 }
 function closeCalcModal(){
@@ -1331,6 +1371,36 @@ async function refresh(){
   document.getElementById("calc_atTime").addEventListener("change", calcUpdateUI);
   document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_targetIn").addEventListener("input", calcUpdateUI);
+
+  const calcIcrIn = document.getElementById("calc_icrIn");
+  const calcIsfIn = document.getElementById("calc_isfIn");
+
+  calcIcrIn.addEventListener("focus", () => calcIcrIn.select());
+  calcIsfIn.addEventListener("focus", () => calcIsfIn.select());
+
+  calcIcrIn.addEventListener("input", () => {
+    const raw = calcIcrIn.value.trim();
+    calcSetManualIc(raw === "" ? null : Number(raw));
+    calcUpdateUI();
+  });
+
+  calcIsfIn.addEventListener("input", () => {
+    const raw = calcIsfIn.value.trim();
+    calcSetManualIsf(raw === "" ? null : Number(raw));
+    calcUpdateUI();
+  });
+
+  calcIcrIn.addEventListener("blur", () => {
+    const raw = calcIcrIn.value.trim();
+    calcSetManualIc(raw === "" ? null : Number(raw));
+    calcUpdateUI();
+  });
+
+  calcIsfIn.addEventListener("blur", () => {
+    const raw = calcIsfIn.value.trim();
+    calcSetManualIsf(raw === "" ? null : Number(raw));
+    calcUpdateUI();
+  });
 
   const editBtn = document.getElementById("calc_editBgBtn");
   editBtn.addEventListener("pointerdown", (e) => {
