@@ -361,6 +361,8 @@
 
 #calcModal .calcTimeWrap{
   position:relative;
+  flex:1 1 0;
+  min-width:0;
 }
 
 #calcModal .calcTimeNative{
@@ -452,12 +454,22 @@
           </div>
 
 <div class="calcCard">
-  <div class="calcTimeWrap">
-    <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
-      <div id="calc_timeLabel">--</div>
-      <span>기준시간</span>
+  <div class="calcInputs" style="margin-top:0;">
+    <div class="calcTimeWrap">
+      <div id="calc_dateDisplay" class="calcTimeDisplay" title="날짜 선택">
+        <div id="calc_dateLabel">--</div>
+        <span>날짜</span>
+      </div>
+      <input id="calc_dateIn" class="calcTimeNative" type="date" />
     </div>
-    <input id="calc_atTime" class="calcTimeNative" type="datetime-local" />
+
+    <div class="calcTimeWrap">
+      <div id="calc_timeDisplay" class="calcTimeDisplay" title="시간 선택">
+        <div id="calc_timeLabel">--</div>
+        <span>시간</span>
+      </div>
+      <input id="calc_timeIn" class="calcTimeNative" type="time" />
+    </div>
   </div>
 
   <div class="calcInputs">
@@ -1058,16 +1070,41 @@ function calcSetManualIsf(n){
   calcManualIsf = (Number.isFinite(n) && n > 0) ? n : null;
 }
 
-function toLocalInputValue(d){
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+function toDateInputValue(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
-function parseLocalInputToDate(v){
-  if (!v) return new Date();
-  const [dp, tp] = v.split("T");
-  const [y,m,d] = dp.split("-").map(Number);
-  const [hh,mm] = tp.split(":").map(Number);
-  return new Date(y, m-1, d, hh, mm, 0, 0);
+
+function toTimeInputValue(d){
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+
+function parseDateAndTimeInputs(){
+  const dateVal = document.getElementById("calc_dateIn").value;
+  const timeVal = document.getElementById("calc_timeIn").value;
+
+  if (!dateVal){
+    return new Date();
+  }
+
+  const [y, m, d] = dateVal.split("-").map(Number);
+  let hh = 0;
+  let mm = 0;
+
+  if (timeVal){
+    [hh, mm] = timeVal.split(":").map(Number);
+  }
+
+  return new Date(y, m - 1, d, hh, mm, 0, 0);
+}
+
+  function formatDateLabel(d){
+  return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())}`;
+}
+
+function formatTimeLabel(d){
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 function formatKST(d){
   return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
@@ -1117,9 +1154,10 @@ function calcGetIobCobAt(atMs){
 function calcUpdateUI(){
   if (!cachedProfile || !cachedEntries) return;
 
-  const atDate = parseLocalInputToDate(document.getElementById("calc_atTime").value);
-  const atMs = atDate.getTime();
-  document.getElementById("calc_timeLabel").textContent = formatKST(atDate);
+const atDate = parseDateAndTimeInputs();
+const atMs = atDate.getTime();
+document.getElementById("calc_dateLabel").textContent = formatDateLabel(atDate);
+document.getElementById("calc_timeLabel").textContent = formatTimeLabel(atDate);
 
   const prof = getProfileAt(cachedProfile, atDate);
   if (!prof) return;
@@ -1243,8 +1281,10 @@ function openCalcModal(){
   modal.setAttribute("aria-hidden", "false");
 
   const now = new Date();
-  document.getElementById("calc_atTime").value = toLocalInputValue(now);
-  document.getElementById("calc_timeLabel").textContent = formatKST(now);
+  document.getElementById("calc_dateIn").value = toDateInputValue(now);
+  document.getElementById("calc_timeIn").value = toTimeInputValue(now);
+  document.getElementById("calc_dateLabel").textContent = formatDateLabel(now);
+  document.getElementById("calc_timeLabel").textContent = formatTimeLabel(now);
 
   calcSetManualBg(null);
   calcSetManualIc(null);
@@ -1314,8 +1354,8 @@ async function refresh(){
     updateMonitorIobCobRealtime();
 
     if (isCalcOpen()){
-      const atDate = parseLocalInputToDate(document.getElementById("calc_atTime").value);
-      const rt = calcGetIobCobAt(atDate.getTime());
+const atDate = parseDateAndTimeInputs();
+const rt = calcGetIobCobAt(atDate.getTime());
       document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
       document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
       document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
@@ -1354,7 +1394,10 @@ async function refresh(){
 document.getElementById("calc_atTime").addEventListener("input", calcUpdateUI);
 
 
-  document.getElementById("calc_atTime").addEventListener("change", calcUpdateUI);
+document.getElementById("calc_dateIn").addEventListener("change", calcUpdateUI);
+document.getElementById("calc_timeIn").addEventListener("change", calcUpdateUI);
+document.getElementById("calc_dateIn").addEventListener("input", calcUpdateUI);
+document.getElementById("calc_timeIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_targetIn").addEventListener("input", calcUpdateUI);
 
