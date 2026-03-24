@@ -359,8 +359,15 @@
     }
     #calcModal .calcDoseBreak strong{ color: rgba(244,244,247,1); font-weight:650; }
 
-    #calcModal .calcHidden{ position:absolute; left:-9999px; top:-9999px; opacity:0; }
-
+#calcModal .calcHidden{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0.01;
+  pointer-events:none;
+  border:0;
+  padding:0;
+}
     #calcModal .calcHeaderLine{
       display:flex;
       align-items:center;
@@ -441,13 +448,6 @@
             <div id="calc_timeDisplay" class="calcTimeDisplay" title="탭하면 시간 직접 변경">
               <div id="calc_timeLabel">--</div>
               <span>기준시간</span>
-            </div>
-
-            <div class="calcBtnRow" aria-label="기준시간 빠른 변경">
-              <button class="calcBtn" data-calc-reset="1">reset</button>
-              <button class="calcBtn" data-calc-add="5">+5분</button>
-              <button class="calcBtn" data-calc-add="10">+10분</button>
-              <button class="calcBtn" data-calc-add="30">+30분</button>
             </div>
 
             <input id="calc_atTime" class="calcHidden" type="datetime-local" />
@@ -1194,13 +1194,6 @@ function calcUpdateUI(){
   document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
 }
 
-function calcBumpMinutes(mins){
-  const input = document.getElementById("calc_atTime");
-  const d = parseLocalInputToDate(input.value);
-  d.setMinutes(d.getMinutes() + mins);
-  input.value = toLocalInputValue(d);
-  calcUpdateUI();
-}
 
 function calcBeginBgEdit(){
   const el = document.getElementById("calc_bgBig");
@@ -1356,17 +1349,6 @@ async function refresh(){
     else input.click();
   });
 
-  document.querySelectorAll(".calcBtn[data-calc-add]").forEach(btn=>{
-    btn.addEventListener("click", () => calcBumpMinutes(Number(btn.dataset.calcAdd)));
-  });
-
-  document.querySelectorAll(".calcBtn[data-calc-reset]").forEach(btn=>{
-    btn.addEventListener("click", () => {
-      const now2 = new Date();
-      document.getElementById("calc_atTime").value = toLocalInputValue(now2);
-      calcUpdateUI();
-    });
-  });
 
   document.getElementById("calc_atTime").addEventListener("change", calcUpdateUI);
   document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
