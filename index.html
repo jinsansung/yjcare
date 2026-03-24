@@ -250,6 +250,12 @@
     }
     #calcModal .calcMiniLine strong{ color: rgba(244,244,247,1); font-weight:650; letter-spacing:0.2px; }
 
+    #calcModal .calcTimeWrap{
+      position:relative;
+      flex:1 1 0;
+      min-width:0;
+    }
+
     #calcModal .calcTimeDisplay{
       width:100%;
       padding:10px 12px;
@@ -265,38 +271,37 @@
       gap:10px;
       min-height:44px;
       min-width:0;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #calcModal .calcTimeDisplay > div{ min-width:0; }
-    #calcModal .calcTimeDisplay span{ color: rgba(244,244,247,0.70); font-weight:600; font-size:12px; flex:0 0 auto; }
-
-    #calcModal .calcBtnRow{
-      display:flex;
-      gap:0;
-      margin-top:10px;
-      border-radius:14px;
-      overflow:hidden;
-      border:1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.03);
-    }
-    #calcModal .calcBtn{
-      flex:1;
-      border:0;
-      border-right:1px solid rgba(255,255,255,0.12);
-      background: transparent;
-      color: rgba(244,244,247,1);
-      padding:10px 8px;
-      font-size:12px;
-      font-weight:650;
-      min-height:40px;
       cursor:pointer;
-      user-select:none;
       -webkit-tap-highlight-color: transparent;
-      white-space:nowrap;
+      position:relative;
+      z-index:1;
     }
-    #calcModal .calcBtn:last-child{ border-right:0; }
-    #calcModal .calcBtn:active{ background: rgba(255,255,255,0.08); }
+    #calcModal .calcTimeDisplay > div{
+      min-width:0;
+      color: rgba(244,244,247,1);
+      font-size:16px;
+      font-weight:650;
+    }
+    #calcModal .calcTimeDisplay span{
+      color: rgba(244,244,247,0.70);
+      font-weight:600;
+      font-size:12px;
+      flex:0 0 auto;
+    }
+
+    #calcModal .calcTimeNative{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      opacity:0.001;
+      cursor:pointer;
+      z-index:2;
+      -webkit-appearance:none;
+      appearance:none;
+      border:0;
+      background:transparent;
+    }
 
     #calcModal .calcInputs{
       display:flex;
@@ -359,24 +364,6 @@
     }
     #calcModal .calcDoseBreak strong{ color: rgba(244,244,247,1); font-weight:650; }
 
-#calcModal .calcTimeWrap{
-  position:relative;
-  flex:1 1 0;
-  min-width:0;
-}
-
-#calcModal .calcTimeNative{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  opacity:0;
-  pointer-events:none;
-  -webkit-appearance:none;
-  appearance:none;
-  border:0;
-  background:transparent;
-}
     #calcModal .calcHeaderLine{
       display:flex;
       align-items:center;
@@ -453,36 +440,36 @@
             </div>
           </div>
 
-<div class="calcCard">
-  <div class="calcInputs" style="margin-top:0;">
-    <div class="calcTimeWrap">
-<div id="calc_dateDisplay" class="calcTimeDisplay" title="날짜 선택">
-  <span>날짜</span>
-  <div id="calc_dateLabel">--</div>
-</div>
-      <input id="calc_dateIn" class="calcTimeNative" type="date" />
-    </div>
+          <div class="calcCard">
+            <div class="calcInputs" style="margin-top:0;">
+              <div class="calcTimeWrap">
+                <div id="calc_dateDisplay" class="calcTimeDisplay" title="날짜 선택">
+                  <span>날짜</span>
+                  <div id="calc_dateLabel">--</div>
+                </div>
+                <input id="calc_dateIn" class="calcTimeNative" type="date" />
+              </div>
 
-    <div class="calcTimeWrap">
-<div id="calc_timeDisplay" class="calcTimeDisplay" title="시간 선택">
-  <span>시간</span>
-  <div id="calc_timeLabel">--</div>
-</div>
-      <input id="calc_timeIn" class="calcTimeNative" type="time" />
-    </div>
-  </div>
+              <div class="calcTimeWrap">
+                <div id="calc_timeDisplay" class="calcTimeDisplay" title="시간 선택">
+                  <span>시간</span>
+                  <div id="calc_timeLabel">--</div>
+                </div>
+                <input id="calc_timeIn" class="calcTimeNative" type="time" />
+              </div>
+            </div>
 
-  <div class="calcInputs">
-    <div class="calcField">
-      <label>탄수(g)</label>
-      <input id="calc_carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
-    </div>
-    <div class="calcField">
-      <label>목표</label>
-      <input id="calc_targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
-    </div>
-  </div>
-</div>
+            <div class="calcInputs">
+              <div class="calcField">
+                <label>탄수(g)</label>
+                <input id="calc_carbsIn" type="number" min="0" step="1" value="0" inputmode="numeric" />
+              </div>
+              <div class="calcField">
+                <label>목표</label>
+                <input id="calc_targetIn" type="number" min="50" step="1" value="180" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
 
           <div class="calcCard">
             <div class="calcSub">권장 인슐린</div>
@@ -1073,11 +1060,9 @@ function calcSetManualIsf(n){
 function toDateInputValue(d){
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
-
 function toTimeInputValue(d){
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
-
 function parseDateAndTimeInputs(){
   const dateVal = document.getElementById("calc_dateIn").value;
   const timeVal = document.getElementById("calc_timeIn").value;
@@ -1096,18 +1081,13 @@ function parseDateAndTimeInputs(){
 
   return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
-
-  function formatDateLabel(d){
+function formatDateLabel(d){
   return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())}`;
 }
-
 function formatTimeLabel(d){
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-function formatKST(d){
-  return `${pad2(d.getMonth()+1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
 function pickNearestEntry(entries, atDate){
   if (!Array.isArray(entries) || !entries.length) return null;
   const at = atDate.getTime();
@@ -1154,10 +1134,11 @@ function calcGetIobCobAt(atMs){
 function calcUpdateUI(){
   if (!cachedProfile || !cachedEntries) return;
 
-const atDate = parseDateAndTimeInputs();
-const atMs = atDate.getTime();
-document.getElementById("calc_dateLabel").textContent = formatDateLabel(atDate);
-document.getElementById("calc_timeLabel").textContent = formatTimeLabel(atDate);
+  const atDate = parseDateAndTimeInputs();
+  const atMs = atDate.getTime();
+
+  document.getElementById("calc_dateLabel").textContent = formatDateLabel(atDate);
+  document.getElementById("calc_timeLabel").textContent = formatTimeLabel(atDate);
 
   const prof = getProfileAt(cachedProfile, atDate);
   if (!prof) return;
@@ -1168,11 +1149,12 @@ document.getElementById("calc_timeLabel").textContent = formatTimeLabel(atDate);
   const icrInput = document.getElementById("calc_icrIn");
   const isfInput = document.getElementById("calc_isfIn");
 
-  const icrDisplay = Number.isFinite(effectiveIc) ? String(effectiveIc) : "";
-  const isfDisplay = Number.isFinite(effectiveIsf) ? String(effectiveIsf) : "";
-
-  if (document.activeElement !== icrInput) icrInput.value = icrDisplay;
-  if (document.activeElement !== isfInput) isfInput.value = isfDisplay;
+  if (document.activeElement !== icrInput){
+    icrInput.value = Number.isFinite(effectiveIc) ? String(effectiveIc) : "";
+  }
+  if (document.activeElement !== isfInput){
+    isfInput.value = Number.isFinite(effectiveIsf) ? String(effectiveIsf) : "";
+  }
 
   const latest = pickLatestEntry(cachedEntries);
   const nearest = pickNearestEntry(cachedEntries, atDate) || latest;
@@ -1239,7 +1221,6 @@ document.getElementById("calc_timeLabel").textContent = formatTimeLabel(atDate);
   document.getElementById("calc_corrIns").textContent = (corrIns !== null) ? corrIns.toFixed(2) : "--";
   document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
 }
-
 
 function calcBeginBgEdit(){
   const el = document.getElementById("calc_bgBig");
@@ -1333,9 +1314,6 @@ function openNativePicker(inputId){
   try{ input.click(); }catch(_){}
 }
 
-  
-
-  
 /* =========================
    루프
 ========================= */
@@ -1372,8 +1350,8 @@ async function refresh(){
     updateMonitorIobCobRealtime();
 
     if (isCalcOpen()){
-const atDate = parseDateAndTimeInputs();
-const rt = calcGetIobCobAt(atDate.getTime());
+      const atDate = parseDateAndTimeInputs();
+      const rt = calcGetIobCobAt(atDate.getTime());
       document.getElementById("calc_iobTxt").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
       document.getElementById("calc_cobTxt").textContent = (rt.cob !== null) ? rt.cob.toFixed(1) : "--";
       document.getElementById("calc_iobSub").textContent = (rt.iob !== null) ? rt.iob.toFixed(2) : "--";
@@ -1409,25 +1387,18 @@ const rt = calcGetIobCobAt(atDate.getTime());
     e.stopPropagation();
   });
 
-document.getElementById("calc_atTime").addEventListener("input", calcUpdateUI);
+  document.getElementById("calc_dateDisplay").addEventListener("click", () => {
+    openNativePicker("calc_dateIn");
+  });
+  document.getElementById("calc_timeDisplay").addEventListener("click", () => {
+    openNativePicker("calc_timeIn");
+  });
 
+  document.getElementById("calc_dateIn").addEventListener("change", calcUpdateUI);
+  document.getElementById("calc_timeIn").addEventListener("change", calcUpdateUI);
+  document.getElementById("calc_dateIn").addEventListener("input", calcUpdateUI);
+  document.getElementById("calc_timeIn").addEventListener("input", calcUpdateUI);
 
-document.getElementById("calc_dateDisplay").addEventListener("click", () => {
-  openNativePicker("calc_dateIn");
-});
-
-document.getElementById("calc_timeDisplay").addEventListener("click", () => {
-  openNativePicker("calc_timeIn");
-});
-
-
-
-
-  
-document.getElementById("calc_dateIn").addEventListener("change", calcUpdateUI);
-document.getElementById("calc_timeIn").addEventListener("change", calcUpdateUI);
-document.getElementById("calc_dateIn").addEventListener("input", calcUpdateUI);
-document.getElementById("calc_timeIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_carbsIn").addEventListener("input", calcUpdateUI);
   document.getElementById("calc_targetIn").addEventListener("input", calcUpdateUI);
 
