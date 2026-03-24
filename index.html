@@ -370,8 +370,8 @@
   inset:0;
   width:100%;
   height:100%;
-  opacity:0.01;
-  cursor:pointer;
+  opacity:0;
+  pointer-events:none;
   -webkit-appearance:none;
   appearance:none;
   border:0;
@@ -456,18 +456,18 @@
 <div class="calcCard">
   <div class="calcInputs" style="margin-top:0;">
     <div class="calcTimeWrap">
-      <div id="calc_dateDisplay" class="calcTimeDisplay" title="날짜 선택">
-        <div id="calc_dateLabel">--</div>
-        <span>날짜</span>
-      </div>
+<div id="calc_dateDisplay" class="calcTimeDisplay" title="날짜 선택">
+  <span>날짜</span>
+  <div id="calc_dateLabel">--</div>
+</div>
       <input id="calc_dateIn" class="calcTimeNative" type="date" />
     </div>
 
     <div class="calcTimeWrap">
-      <div id="calc_timeDisplay" class="calcTimeDisplay" title="시간 선택">
-        <div id="calc_timeLabel">--</div>
-        <span>시간</span>
-      </div>
+<div id="calc_timeDisplay" class="calcTimeDisplay" title="시간 선택">
+  <span>시간</span>
+  <div id="calc_timeLabel">--</div>
+</div>
       <input id="calc_timeIn" class="calcTimeNative" type="time" />
     </div>
   </div>
@@ -1318,6 +1318,24 @@ function resizeStage(){
   canvas.style.height = h + "px";
 }
 
+function openNativePicker(inputId){
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  try{
+    if (typeof input.showPicker === "function"){
+      input.showPicker();
+      return;
+    }
+  }catch(_){}
+
+  try{ input.focus(); }catch(_){}
+  try{ input.click(); }catch(_){}
+}
+
+  
+
+  
 /* =========================
    루프
 ========================= */
@@ -1394,6 +1412,18 @@ const rt = calcGetIobCobAt(atDate.getTime());
 document.getElementById("calc_atTime").addEventListener("input", calcUpdateUI);
 
 
+document.getElementById("calc_dateDisplay").addEventListener("click", () => {
+  openNativePicker("calc_dateIn");
+});
+
+document.getElementById("calc_timeDisplay").addEventListener("click", () => {
+  openNativePicker("calc_timeIn");
+});
+
+
+
+
+  
 document.getElementById("calc_dateIn").addEventListener("change", calcUpdateUI);
 document.getElementById("calc_timeIn").addEventListener("change", calcUpdateUI);
 document.getElementById("calc_dateIn").addEventListener("input", calcUpdateUI);
